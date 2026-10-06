@@ -1,7 +1,7 @@
 {
-  "name": "Švih – tréninkový deník",
-  "short_name": "Švih",
-  "description": "Tréninkový deník do posilovny s golfovým modulem.",
+  "name": "Gym tracking",
+  "short_name": "Gym",
+  "description": "Tréninkový deník do posilovny ",
   "lang": "cs",
   "start_url": "./",
   "scope": "./",
