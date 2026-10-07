@@ -152,6 +152,14 @@ button.li:hover{background:var(--surface2)}
 .rest-prog{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:6px}
 .rest-prog i{display:block;height:100%;background:var(--accent);transition:width .25s linear}
 .restbar.done .rest-time{color:var(--accent)}
+.chk.hold{color:var(--accent);border-color:var(--accent)}
+.chk.hold.run{background:var(--accent);color:var(--accent-ink);font-size:18px;font-weight:700}
+.hold-lbl{text-align:center;font-weight:700;font-size:15px;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em}
+.hold-big{text-align:center;font-weight:700;font-size:96px;line-height:1;font-variant-numeric:tabular-nums}
+.hold-sheet[data-phase="over"] .hold-big,.hold-sheet[data-phase="over"] .hold-lbl{color:var(--accent)}
+.hold-sheet[data-phase="prep"] .hold-big{color:var(--gold)}
+body:has(.scrim) .toast{bottom:auto;top:calc(14px + env(safe-area-inset-top,0px))}
+
 
 /* Spodní panely (sheety) */
 .scrim{position:fixed;inset:0;background:rgba(5,10,6,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center;animation:fade .15s ease}
@@ -159,6 +167,9 @@ button.li:hover{background:var(--surface2)}
 .sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 10px}
 .sheet.full{height:100%;max-height:100%;border-radius:0;padding-top:0}
 .sheet.full .top{margin:0 -16px}
+.sheet.full .grab{margin:8px auto 0}
+.sheet{will-change:transform}
+
 @keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){.scrim,.sheet{animation:none}}
