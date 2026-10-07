@@ -1,6 +1,6 @@
 /* Service worker: aplikace funguje offline (i v posilovně bez signálu).
    Při každé změně souborů zvyš číslo verze, aby si telefon stáhl novou verzi. */
-const VERSION = 'svih-v2';
+const VERSION = 'svih-v4';
 const ASSETS = [
   './',
   './index.html',
