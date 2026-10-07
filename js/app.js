@@ -249,16 +249,47 @@ function openSheet(build, opts = {}) {
   const scrim = document.createElement('div'); scrim.className = 'scrim';
   const sh = document.createElement('div'); sh.className = 'sheet' + (opts.full ? ' full' : ''); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
   scrim.appendChild(sh); document.body.appendChild(scrim);
-  const o = { scrim, sh, build, opts, refresh() { const st = sh.scrollTop; sh.innerHTML = (opts.full ? '' : '<div class="grab"></div>') + build(o); sh.scrollTop = st; opts.after && opts.after(o); } };
+  const o = { scrim, sh, build, opts, refresh() { const st = sh.scrollTop; sh.innerHTML = '<div class="grab" aria-hidden="true"></div>' + build(o); sh.scrollTop = st; opts.after && opts.after(o); } };
   scrim.addEventListener('click', e => { if (e.target === scrim && !opts.modal) closeSheet(o); });
-  ovStack.push(o); o.refresh();
+  ovStack.push(o); o.refresh(); enableSwipe(o);
   document.body.style.overflow = 'hidden';
   const f = sh.querySelector('[autofocus]'); if (f) setTimeout(() => f.focus(), 50);
   return o;
 }
+/* Stažení listu prstem dolů = zavření */
+function enableSwipe(o) {
+  const { sh, scrim } = o; let y0 = 0, x0 = 0, t0 = 0, dy = 0, mode = null, lastY = 0, lastT = 0, vel = 0;
+  const reset = anim => { sh.style.transition = anim ? 'transform .22s ease' : ''; sh.style.transform = ''; scrim.style.backgroundColor = ''; };
+  sh.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { mode = 'no'; return; }
+    const t = e.target; if (t.closest('input,textarea,select')) { mode = 'no'; return; }
+    y0 = lastY = e.touches[0].clientY; x0 = e.touches[0].clientX; t0 = lastT = performance.now(); dy = 0; vel = 0; mode = null; sh.style.transition = '';
+  }, { passive: true });
+  sh.addEventListener('touchmove', e => {
+    if (mode === 'no') return;
+    const y = e.touches[0].clientY, x = e.touches[0].clientX; const d = y - y0;
+    if (mode === null) {
+      if (Math.abs(d) < 8 && Math.abs(x - x0) < 8) return;
+      mode = (d > 0 && Math.abs(d) > Math.abs(x - x0) && sh.scrollTop <= 0) ? 'drag' : 'no';
+      if (mode !== 'drag') return; y0 = y; 
+    }
+    dy = Math.max(0, y - y0); const now = performance.now(); vel = (y - lastY) / Math.max(1, now - lastT); lastY = y; lastT = now;
+    sh.style.transform = `translateY(${dy}px)`;
+    scrim.style.backgroundColor = `rgba(5,10,6,${0.45 * Math.max(0, 1 - dy / (sh.offsetHeight || 400))})`;
+    e.preventDefault();
+  }, { passive: false });
+  const end = () => {
+    if (mode !== 'drag') { mode = null; return; } mode = null;
+    if (dy > Math.min(140, sh.offsetHeight * 0.3) || (vel > 0.6 && dy > 30)) {
+      sh.style.transition = 'transform .2s ease'; sh.style.transform = 'translateY(100%)'; scrim.style.transition = 'background-color .2s'; scrim.style.backgroundColor = 'rgba(5,10,6,0)';
+      setTimeout(() => closeSheet(o), 190);
+    } else reset(true);
+  };
+  sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', () => { mode = null; reset(true); });
+}
 function closeSheet(o) {
   o = o || ovStack[ovStack.length - 1]; if (!o) return;
-  const i = ovStack.indexOf(o); if (i >= 0) ovStack.splice(i, 1);
+  const i = ovStack.indexOf(o); if (i < 0) return; ovStack.splice(i, 1);
   o.scrim.remove(); o.opts.onClose && o.opts.onClose();
   if (!ovStack.length) document.body.style.overflow = '';
 }
@@ -288,10 +319,10 @@ function toast(msg, undo, cls = '', label = 'Zpět') {
 
 /* Zvuk a vibrace */
 let actx = null;
-function beep() {
+function beep(short) {
   if (!SET().sound) return;
   try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); const t = actx.currentTime;
-    [0, .22, .44].forEach((d, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = i === 2 ? 1175 : 880; g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(.25, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + .18); o.connect(g).connect(actx.destination); o.start(t + d); o.stop(t + d + .2); });
+    (short ? [0] : [0, .22, .44]).forEach((d, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = i === 2 ? 1175 : 880; g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(.25, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + .18); o.connect(g).connect(actx.destination); o.start(t + d); o.stop(t + d + .2); });
   } catch {}
 }
 const vib = p => { if (SET().vib) try { navigator.vibrate && navigator.vibrate(p); } catch {} };
@@ -457,7 +488,7 @@ function exCard(it, i, w) {
       <button class="setno ${s.k}" data-a="setMenu" data-i="${i}" data-s="${si}" aria-label="Typ série ${lab}">${lab}</button>
       <div class="prev">${pv ? setText(ex, pv) : '<span class="faint">–</span>'}${s.up ? ' <b>↑</b>' : ''}</div>
       ${cells}
-      <button class="chk" data-a="tick" data-i="${i}" data-s="${si}" aria-label="Série hotová" aria-pressed="${s.done}">${ICON.check}</button></div>`;
+      ${holdBtn(ex, s, i, si)}</div>`;
   }).join('');
   const target = it.lo ? `${it.lo === it.hi ? it.lo : it.lo + '–' + it.hi} ${ex.t === 'time' ? 's' : ex.t === 'speed' ? 'švihů' : 'opak.'}` : '';
   return `<article class="excard ${inSS ? 'ssA' : ''}">
@@ -497,7 +528,7 @@ function completeSet(i, si) {
   // pauza
   const nextIt = w.ex[i + 1];
   if (it.ss && nextIt) { toast(`Superset: pokračuj cvikem ${esc(exById(nextIt.ex).n)}`); }
-  else if (SET().autoRest) {
+  else if (SET().autoRest && !DB.active.hold) {
     const secs = s.k === 'w' ? 60 : (it.rest || ex.r || SET().rest);
     startRest(secs);
   }
@@ -546,7 +577,7 @@ A.exRemove = () => { const { i } = topSheet().ctx; const a = DB.active.w.ex; con
   toast(`${esc(exById(rm.ex).n)} odebrán`, () => { a.splice(i, 0, rm); saveActive(); rerender(); }); };
 A.addExercise = () => openPicker(ids => { for (const id of ids) DB.active.w.ex.push({ id: uid(), ex: id, ss:0, rest:null, note:'', sets: buildSets(id, null, 3) }); saveActive(); rerender(); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 50); });
 A.cancelWorkout = () => confirmSheet('Zrušit trénink?', 'Zapsané série se neuloží.', [{ label:'Zrušit trénink', cls:'danger', fn: () => {
-  const w = DB.active.w; DB.active.w = null; DB.active.restEnd = 0; saveActive(); keepAwake(false); render();
+  const w = DB.active.w; DB.active.w = null; DB.active.restEnd = 0; DB.active.hold = null; saveActive(); keepAwake(false); render();
   toast('Trénink zrušen', () => { DB.active.w = w; saveActive(); TAB = 'train'; render(); }); } }]);
 
 /* Vstupy */
@@ -643,6 +674,76 @@ A.plateCalc = () => {
   o.sh.addEventListener('change', e => { if (e.target.id === 'pcT') { target = parseFloat(e.target.value.replace(',', '.')) || 0; o.refresh(); } });
 };
 
+/* ===================== Stopky pro výdrž (plank apod.) ===================== */
+const HOLD_GRACE = 3; // s po cíli, do kdy se zapíše jen cílový čas
+function holdBtn(ex, s, i, si) {
+  const h = DB.active.hold;
+  if (ex.t === 'time' && !s.done) {
+    if (h && h.i === i && h.si === si) return `<button class="chk hold run" data-a="holdOpen" aria-label="Stopky běží – otevřít"><span class="num" data-holdtxt>${holdShort()}</span></button>`;
+    return `<button class="chk hold" data-a="hold" data-i="${i}" data-s="${si}" aria-label="Spustit stopky">${ICON.play}</button>`;
+  }
+  return `<button class="chk" data-a="tick" data-i="${i}" data-s="${si}" aria-label="Série hotová" aria-pressed="${s.done}">${ICON.check}</button>`;
+}
+function holdState() {
+  const h = DB.active.hold; if (!h) return null; const now = Date.now();
+  if (now < h.prep) return { phase: 'prep', left: Math.ceil((h.prep - now) / 1000) };
+  const el = (now - h.prep) / 1000;
+  return el < h.target ? { phase: 'run', el, left: Math.ceil(h.target - el) } : { phase: 'over', el, over: Math.floor(el - h.target) };
+}
+function holdShort() { const st = holdState(); if (!st) return ''; return st.phase === 'prep' ? st.left : st.phase === 'run' ? st.left : '+' + st.over; }
+let holdSheet = null;
+function startHold(i, si) {
+  const it = DB.active.w.ex[i]; const s = it.sets[si];
+  if (DB.active.hold) { toast('Nejdřív dokonči běžící stopky'); openHoldSheet(); return; }
+  const target = +s.sec || it.lo || 30;
+  DB.active.hold = { i, si, target, prep: Date.now() + 3000, beeped: 0 };
+  DB.active.restEnd = 0; saveActive(); rerender(); openHoldSheet();
+}
+A.hold = el => startHold(+el.dataset.i, +el.dataset.s);
+A.holdOpen = () => openHoldSheet();
+function openHoldSheet() {
+  const h = DB.active.hold; if (!h || holdSheet) return;
+  const it = DB.active.w.ex[h.i]; const ex = exById(it.ex); const s = it.sets[h.si];
+  const side = s.side === 'L' ? ' · levá strana' : s.side === 'P' ? ' · pravá strana' : '';
+  holdSheet = openSheet(() => `<div class="stack hold-sheet" style="gap:12px">
+      <div class="row between"><div class="grow"><div class="h3 ellipsis">${esc(ex.n)}</div><div class="small muted">Cíl ${h.target} s${side}</div></div><button class="iconbtn" data-a="closeSheet" aria-label="Skrýt (stopky poběží dál)">${ICON.close}</button></div>
+      <div class="hold-lbl" data-hl></div>
+      <div class="hold-big num" data-hb aria-live="off"></div>
+      <div class="rest-prog" style="height:8px;border-radius:4px"><i data-hp></i></div>
+      <div class="small muted" data-hn style="min-height:2.6em;text-align:center"></div>
+      <button class="btn primary block big" data-a="holdStop" data-hbtn>Stop a zapsat</button>
+      <button class="btn ghost block" data-a="holdCancel">Zrušit stopky</button></div>`,
+    { modal: true, after: () => tickHold(), onClose: () => { holdSheet = null; rerender(); } });
+}
+function tickHold() {
+  const h = DB.active.hold; const st = holdState();
+  document.querySelectorAll('[data-holdtxt]').forEach(e => e.textContent = holdShort());
+  if (!h || !st) return;
+  if (st.phase !== 'prep' && !h.beeped) { h.beeped = 1; vib(60); beep(1); }
+  if (st.phase === 'over' && h.beeped < 2) { h.beeped = 2; vib([200, 100, 200]); beep(); saveActive(); }
+  if (!holdSheet) return; const r = holdSheet.sh;
+  const lbl = r.querySelector('[data-hl]'), big = r.querySelector('[data-hb]'), bar = r.querySelector('[data-hp]'), note = r.querySelector('[data-hn]'), btn = r.querySelector('[data-hbtn]');
+  if (!big) return;
+  r.querySelector('.hold-sheet').dataset.phase = st.phase;
+  if (st.phase === 'prep') { lbl.textContent = 'Připrav se'; big.textContent = st.left; bar.style.width = '0%'; note.textContent = 'Stopky se spustí samy. Klepnutím na Stop je zrušíš.'; btn.textContent = 'Začít hned'; btn.dataset.a = 'holdNow'; }
+  else if (st.phase === 'run') { lbl.textContent = 'Zbývá'; big.textContent = fmtDur(st.left); bar.style.width = Math.min(100, st.el / h.target * 100) + '%'; note.textContent = 'Když zastavíš dřív, zapíše se skutečný čas.'; btn.textContent = 'Stop a zapsat'; btn.dataset.a = 'holdStop'; }
+  else { lbl.textContent = 'Cíl splněn – drž dál, nebo zastav'; big.textContent = '+' + st.over + ' s'; bar.style.width = '100%';
+    note.textContent = st.el - h.target <= HOLD_GRACE ? `Když zastavíš teď, zapíše se ${h.target} s.` : `Zapíše se celkový čas ${Math.floor(st.el)} s.`; btn.textContent = 'Stop a zapsat'; btn.dataset.a = 'holdStop'; }
+}
+A.holdNow = () => { const h = DB.active.hold; if (!h) return; h.prep = Date.now(); saveActive(); tickHold(); };
+A.holdCancel = () => { DB.active.hold = null; saveActive(); if (holdSheet) closeSheet(holdSheet); else rerender(); };
+A.holdStop = () => {
+  const h = DB.active.hold; const st = holdState(); if (!h || !st) return;
+  if (st.phase === 'prep') return A.holdCancel();
+  const el = st.el; const it = DB.active.w.ex[h.i]; const s = it && it.sets[h.si];
+  if (!s) return A.holdCancel();
+  const rec = el < h.target ? Math.max(1, Math.round(el)) : (el - h.target <= HOLD_GRACE ? h.target : Math.floor(el));
+  s.sec = rec; DB.active.hold = null; saveActive();
+  if (holdSheet) { const o = holdSheet; holdSheet = null; o.opts.onClose = null; closeSheet(o); }
+  completeSet(h.i, h.si);
+  toast(`Zapsáno ${rec} s${rec > h.target ? ` (cíl ${h.target} s)` : rec < h.target ? ` z ${h.target} s` : ''}`);
+};
+
 /* ===================== Pauza ===================== */
 let restFired = false;
 function startRest(secs) { DB.active.restEnd = Date.now() + secs * 1000; DB.active.restTotal = secs; restFired = false; saveActive(); renderRestBar(); }
@@ -668,6 +769,7 @@ function tickRest() {
 setInterval(() => {
   if (!DB.active.w) return;
   document.querySelectorAll('[data-elapsed]').forEach(e => e.textContent = fmtDur((Date.now() - DB.active.w.start) / 1000));
+  if (DB.active.hold) tickHold();
   if (DB.active.restEnd) {
     const left = DB.active.restEnd - Date.now();
     if (left <= 0 && !restFired) { restFired = true; vib([200, 100, 200]); beep(); }
@@ -685,6 +787,7 @@ A.finish = () => {
   finishNow();
 };
 function finishNow() {
+  DB.active.hold = null; if (holdSheet) { const o = holdSheet; holdSheet = null; o.opts.onClose = null; closeSheet(o); }
   const w = clone(DB.active.w); w.end = Date.now();
   w.ex = w.ex.map(e => ({ ...e, sets: e.sets.filter(s => s.done).map(s => { const o = { ...s }; delete o.up; return o; }) })).filter(e => e.sets.length);
   addWorkoutToHistory(w);
@@ -1310,6 +1413,7 @@ function boot() {
   rebuildExMap();
   if (DB.active.w) { TAB = 'train'; keepAwake(true); }
   render();
+  if (DB.active.w && DB.active.hold) openHoldSheet();
   if (!S().meta.onboarded && !S().programs.length && !allWorkouts().length) openOnboarding();
   initSync();
 }
