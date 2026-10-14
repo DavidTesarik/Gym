@@ -5,7 +5,8 @@ const MUSCLES = {
 };
 const FOCUS = { sila:'Síla & objem', vybus:'Výbušnost', golf:'Golf', mob:'Mobilita & prevence' };
 const TYPES = {
-  wr:'kg × opakování', bw:'Opakování (± kg)', time:'Čas (s)', dist:'Vzdálenost (cm)', speed:'Rychlost (mph) × švihy'
+  wr:'kg × opakování', bw:'Opakování (± kg)', time:'Čas (s)', dist:'Vzdálenost (cm)', speed:'Rychlost (mph) × švihy',
+  complex:'Komplexní cvik (fáze na čas)'
 };
 
 const EX = [];
@@ -337,6 +338,28 @@ E('band_rot','Rotace s gumou v golfovém postoji',['core'],['hips','shoulders'],
  'Specifický pohyb švihu|Rychlá rotace boků',
  'Ztráta postoje|Ohýbání rukou',{r:45,sd:1});
 
+/* ---------- KOMPLEXNÍ A KONDIČNÍ ---------- */
+E('plank_circuit','Plankový okruh (4 fáze)',['core'],['shoulders','hips'],'Vlastní váha',['golf','sila'],'complex','plank',
+ 'Jedno opakování = 4 fáze bez pauzy: plank, boční plank vpravo, plank, boční plank vlevo.|Stopky hlídají fáze a 3 s před změnou pípnou.|Mezi fázemi se jen přetoč, nepokládej se.',
+ 'Boky v jedné linii po celou dobu|Při přetáčení drž břicho zpevněné',
+ 'Propadlá bedra v únavě|Spěch při přechodu mezi fázemi',{r:60,ph:[{n:'Plank',s:30},{n:'Boční plank P',s:30},{n:'Plank',s:30},{n:'Boční plank L',s:30}]});
+E('air_squat','Dřep s vlastní vahou',['quads','glutes'],['core'],'Vlastní váha',['sila'],'bw','gsquat',
+ 'Chodidla na šíři ramen.|Jdi do hlubokého dřepu, ruce před sebe.|Vytlač se nahoru.',
+ 'Pata na zemi|Kolena ven',
+ 'Kulatá záda|Krátký rozsah',{r:60});
+E('burpee','Angličák (burpee)',['quads','chest'],['core','shoulders'],'Vlastní váha',['vybus'],'bw','jump',
+ 'Z dřepu polož ruce na zem a odskoč nohama do kliku.|Udělej klik (volitelné).|Přeskoč nohama zpět k rukám.|Vyskoč s rukama nad hlavou.',
+ 'Plynulý rytmus|Zpevněný trup v kliku',
+ 'Propadlá bedra|Tvrdé dopady',{r:60});
+E('mountain_climber','Horolezec',['core'],['shoulders','hips'],'Vlastní váha',['vybus'],'bw','pushup',
+ 'Pozice vysokého kliku.|Střídavě přitahuj kolena k hrudníku v rychlém tempu.',
+ 'Boky nízko|Ramena nad dlaněmi',
+ 'Zadek nahoru|Houpání v ramenou',{r:45});
+E('jumping_jack','Skákací panák',['calves','shoulders'],['hips'],'Vlastní váha',['vybus'],'bw','raise',
+ 'Výskokem roznož a ruce dej nad hlavu.|Výskokem zpět do stoje spojného.',
+ 'Lehce na špičkách|Rytmus',
+ 'Tvrdé dopady na paty',{r:30});
+
 /* ---------- MOBILITA & PREVENCE ---------- */
 E('tspine_rot','Rotace hrudní páteře v kleku na boku (open book)',['back'],['shoulders'],'Vlastní váha',['mob','golf'],'bw','openbook',
  'Lehni si na bok, kolena pokrčená 90°, ruce před sebou.|Horní ruku otevři obloukem na druhou stranu, oči ji sledují.|Kolena zůstávají spojená a na zemi.|Vrať a opakuj.',
@@ -440,7 +463,7 @@ const TESTS = [
 ];
 
 /* ===== Šablony programů ===== */
-function D(name, items){ return {name, items: items.map(x => ({ex:x[0], sets:x[1], lo:x[2], hi:x[3], ss:x[4]?1:0}))}; }
+function D(name, items, o){ return Object.assign({name, items: items.map(x => ({ex:x[0], sets:x[1], lo:x[2], hi:x[3], ss:x[4]?1:0}))}, o || {}); }
 const TEMPLATES = [
   {tid:'ppl', name:'Push / Pull / Legs', desc:'Klasika na sílu a objem. 3–6 tréninků týdně, dny se střídají dokola.', tag:'sila', days:[
     D('Push',[['bench',4,6,10],['ohp',3,6,10],['incline_db',3,8,12],['lateral_raise',3,12,15],['pushdown',3,10,15],['oh_tri_ext',2,12,15]]),
@@ -474,6 +497,15 @@ const TEMPLATES = [
   {tid:'power', name:'Atletická výbušnost', desc:'2× týdně. Kontrastní dvojice: těžký cvik + hned poté výbušný (supersety).', tag:'vybus', days:[
     D('Výbušnost A',[['trapbar_dl',4,3,5,1],['cmj',4,3,3],['power_clean',4,2,3],['mb_slam',3,5,5],['broad_jump',3,3,3]]),
     D('Výbušnost B',[['front_squat',4,3,5,1],['box_jump',4,3,3],['kb_swing',3,8,10],['lateral_bound',3,4,4],['mb_chest_pass',3,5,5],['sprint',4,1,1]])
+  ]},
+  {tid:'interval', name:'Intervalový kruhový trénink', desc:'Kruh 8 cviků: 40 s cvičíš, 20 s pauza, po kole 60 s oddech, 3 kola (zhruba 25 minut). Časovač tě provede a 3 s před změnou pípne.', tag:'vybus', days:[
+    D('Kruh celé tělo',[['burpee',1,1,1],['air_squat',1,1,1],['pushup',1,1,1],['mountain_climber',1,1,1],['kb_swing',1,1,1],['lunge',1,1,1],['jumping_jack',1,1,1],['plank',1,1,1]],{mode:'interval',cfg:{work:40,rest:20,rounds:3,rrest:60}})
+  ]},
+  {tid:'tabata', name:'Tabata 20/10', desc:'Klasická tabata: 20 s naplno, 10 s pauza. 8 cviků v kole, 2 kola s minutou oddechu.', tag:'vybus', days:[
+    D('Tabata',[['burpee',1,1,1],['air_squat',1,1,1],['mountain_climber',1,1,1],['pushup',1,1,1],['jumping_jack',1,1,1],['kb_swing',1,1,1],['box_jump',1,1,1],['plank',1,1,1]],{mode:'interval',cfg:{work:20,rest:10,rounds:2,rrest:60}})
+  ]},
+  {tid:'ladder', name:'Žebřík 1–10', desc:'Ve 1. kole 1 opakování každého cviku, ve 2. kole 2 … až do 10. Jde přepnout na pyramidu (zpět dolů).', tag:'sila', days:[
+    D('Žebřík',[['pullup',1,1,1],['pushup',1,1,1],['air_squat',1,1,1]],{mode:'ladder',cfg:{from:1,step:1,top:10,pyr:0,rest:0}})
   ]},
   {tid:'mob', name:'Golf mobilita & prevence', desc:'15–20 minut. Před hrou, v den volna nebo jako rozcvička.', tag:'mob', days:[
     D('Mobilita',[['worlds_greatest',2,5,5],['hip_9090',2,6,8],['tspine_rot',2,8,10],['hip_cars',2,3,5],['thoracic_ext',2,8,10],['band_er',2,12,15],['nordic',2,4,6],['wrist_mob',1,10,10]])

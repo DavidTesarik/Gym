@@ -6,6 +6,8 @@ Webová aplikace do posilovny, kterou si nainstaluješ na plochu telefonu. Fungu
 - Programy Push/Pull/Legs, Upper/Lower, Full body, Golf (mimo sezónu i v sezóně), Overspeed, Výbušnost, Mobilita – vše upravitelné
 - Knihovna 85 cviků s animovanou ukázkou, postupem a častými chybami
 - Statistiky progresu, osobní rekordy, golfové testy a rozdíl levá/pravá
+- Komplexní cviky z několika časových fází (např. plankový okruh) s pípnutím 3 s před každou změnou
+- Formy tréninku: intervaly / tabata s časovačem a žebřík (i jako pyramida)
 
 ## 1. Nahrání na GitHub
 
@@ -45,7 +47,7 @@ Aplikace se pak spouští přes celou obrazovku jako normální appka a funguje 
 
 ## Aktualizace aplikace
 
-Když změníš jakýkoli soubor, v `sw.js` zvyš číslo verze (`svih-v1` → `svih-v2`) a nahraj změny na GitHub. Při dalším otevření aplikace se ukáže lišta **Je dostupná nová verze → Načíst**. Data zůstanou zachovaná.
+Když změníš jakýkoli soubor, v `sw.js` zvyš číslo verze (např. `svih-v5` → `svih-v6`) a nahraj změny na GitHub. Při dalším otevření aplikace se ukáže lišta **Je dostupná nová verze → Načíst**. Data zůstanou zachovaná.
 
 ## Struktura
 

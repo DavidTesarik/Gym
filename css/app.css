@@ -65,6 +65,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:4px 0}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--accent)}
 .btn.danger{color:var(--warn);background:var(--warn-soft);border-color:transparent}
 .btn.block{width:100%}
+.btn svg{width:22px;height:22px;flex:none}
 .btn.sm{min-height:38px;padding:0 12px;font-size:14px;border-radius:10px}
 .btn.big{min-height:58px;font-size:19px;font-family:var(--f-display);letter-spacing:.3px}
 .btn:disabled{opacity:.45;cursor:default}
@@ -158,6 +159,21 @@ button.li:hover{background:var(--surface2)}
 .hold-big{text-align:center;font-weight:700;font-size:96px;line-height:1;font-variant-numeric:tabular-nums}
 .hold-sheet[data-phase="over"] .hold-big,.hold-sheet[data-phase="over"] .hold-lbl{color:var(--accent)}
 .hold-sheet[data-phase="prep"] .hold-big{color:var(--gold)}
+.tm{display:flex;flex-direction:column;gap:14px;min-height:calc(100vh - 40px);padding-block:8px 16px;border-radius:18px}
+.tm-top{font-weight:700;font-size:15px;opacity:.85}
+.tm-kind{font-weight:800;font-size:16px;letter-spacing:.1em;text-transform:uppercase;text-align:center;margin-top:12px}
+.tm-name{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1.1;text-align:center;text-wrap:balance;min-height:1.1em}
+.tm-big{font-weight:700;font-size:min(34vw,150px);line-height:1;text-align:center;font-variant-numeric:tabular-nums;margin:8px 0}
+.tm-next{text-align:center;font-size:17px;font-weight:600;opacity:.85;min-height:1.4em}
+.tm-prog{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:auto}
+.tm-prog i{display:block;height:100%;background:var(--accent);transition:width .25s linear}
+.sheet.full:has(.tm[data-kind="work"]){background:var(--accent);color:var(--accent-ink)}
+.sheet.full:has(.tm[data-kind="work"]) .iconbtn{color:var(--accent-ink)}
+.sheet.full:has(.tm[data-kind="work"]) .tm-prog{background:rgba(255,255,255,.3)}
+.sheet.full:has(.tm[data-kind="work"]) .tm-prog i{background:var(--accent-ink)}
+.sheet.full:has(.tm[data-kind="work"]) .btn{background:rgba(255,255,255,.16);color:var(--accent-ink);border-color:transparent}
+.sheet.full:has(.tm[data-kind="prep"]) .tm-big,.sheet.full:has(.tm[data-kind="paused"]) .tm-big{color:var(--gold)}
+.sheet.full:has(.tm[data-kind="rrest"]){background:var(--gold-soft)}
 body:has(.scrim) .toast{bottom:auto;top:calc(14px + env(safe-area-inset-top,0px))}
 
 
