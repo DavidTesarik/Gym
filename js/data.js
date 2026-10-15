@@ -107,8 +107,8 @@ E('lateral_raise','Upažování s jednoručkami',['shoulders'],[],'Jednoruční 
  'Stůj vzpřímeně, jednoručky u boků.|Zvedni ruce do strany do výšky ramen, lokty mírně pokrčené.|Pomalu spusť.',
  'Veď pohyb lokty|Malá váha, pomalé tempo',
  'Švihání trupem|Zvedání ramen k uším',{r:60,pr:'db'});
-E('rear_delt','Zadní ramena v předklonu',['shoulders'],['back'],'Jednoruční činky',['sila','golf'],'wr','row',
- 'Předkloň se téměř do vodorovné polohy.|Ruce visí pod rameny.|Rozpaž do strany, lokty mírně pokrčené.|Spusť pomalu.',
+E('rear_delt','Zadní ramena v předklonu vsedě',['shoulders'],['back'],'Jednoruční činky',['sila','golf'],'wr','row',
+ 'Sedni si na kraj lavice, předkloň se hrudníkem ke stehnům.|Jednoručky drž pod lýtky, dlaně k sobě.|Rozpaž do strany až do výšky ramen, lokty mírně pokrčené.|Pomalu spusť.',
  'Lopatky se nestahují naplno|Myslí na lokty',
  'Švih|Moc velká váha',{r:60,pr:'db'});
 E('landmine_press','Landmine tlak jednoruč',['shoulders','chest'],['triceps','core'],'Landmine',['sila','golf'],'wr','ohp',
@@ -390,64 +390,9 @@ E('pigeon','Holubí pozice',['hips','glutes'],[],'Vlastní váha',['mob','golf']
  'Uvolnění vnější rotace kyčle|Dýchej do protažení',
  'Přetáčení pánve|Bolest kolena – uprav polohu',{r:15,sd:1});
 E('wrist_mob','Mobilita zápěstí a předloktí',['forearms'],[],'Vlastní váha',['mob','golf'],'bw','curl',
- 'Na všech čtyřech polož dlaně na zem, prsty k sobě i od sebe.|Pomalu přenášej váhu a krouž.|Pak protáhni flexory a extenzory.',
+ 'Stůj vzpřímeně, ruce upaž nebo předpaž.|Pomalu krouž zápěstími na jednu stranu, pak na druhou (10× každým směrem).|Nakonec protáhni předloktí: natáhni ruku a druhou rukou přitáhni prsty k sobě, dlaní nahoru i dolů.',
  'Prevence golfového lokte|Jemně',
  'Bolest = stop',{r:15});
-
-/* ===== Vzory pohybu pro schematickou animaci (úhly: 0 = dolů, 90 = vpřed, 180 = nahoru, -90 = vzad) ===== */
-const ST = {a:'f',fx:110,T:180,UA:0,FA:0,TH:0,SH:0};
-const PAT = {
-  squat:{prop:'bar',at:'shoulder',k:[{...ST,UA:-35,FA:165},{...ST,T:142,UA:-55,FA:150,TH:82,SH:-28}]},
-  gsquat:{k:[{...ST,UA:15,FA:165},{...ST,T:145,UA:45,FA:165,TH:82,SH:-28}]},
-  hinge:{prop:'bar',k:[{...ST},{...ST,T:105,TH:22,SH:-8}]},
-  slrdl:{k:[{...ST,fx:105},{...ST,fx:105,T:98,TH:4,TH2:-82,SH2:-84}]},
-  lunge:{k:[{...ST,fx:135,TH:22,SH:-8,TH2:-24,SH2:-6},{...ST,fx:135,T:174,TH:80,SH:-6,TH2:-12,SH2:-96}]},
-  stepup:{box:[100,128,50,30],k:[{...ST,fx:128,fy:128,T:165,TH:75,SH:-12,TH2:-10,SH2:-2},{...ST,fx:128,fy:128,TH:0,SH:0,TH2:-12,SH2:-50}]},
-  bench:{prop:'bar',bench:1,k:[{a:'h',hx:140,hy:112,T:-90,UA:180,FA:180,TH:62,SH:0},{a:'h',hx:140,hy:112,T:-90,UA:72,FA:176,TH:62,SH:0}]},
-  skull:{prop:'bar',bench:1,k:[{a:'h',hx:140,hy:112,T:-90,UA:168,FA:168,TH:62,SH:0},{a:'h',hx:140,hy:112,T:-90,UA:158,FA:-45,TH:62,SH:0}]},
-  fly:{prop:'cable',cab:[205,60],k:[{...ST,fx:105,UA:-65,FA:-55},{...ST,fx:105,UA:88,FA:92}]},
-  dip:{bars:1,k:[{a:'h',hx:110,hy:78,T:172,UA:0,FA:0,TH:15,SH:-35},{a:'h',hx:110,hy:100,T:160,UA:-95,FA:8,TH:15,SH:-35}]},
-  pushup:{k:[{a:'f',fx:175,T:-114,UA:0,FA:0,TH:66,SH:66},{a:'f',fx:175,T:-102,UA:-82,FA:25,TH:78,SH:78}]},
-  ohp:{prop:'bar',k:[{...ST,UA:18,FA:168},{...ST,UA:176,FA:180}]},
-  landmine:{prop:'lm',lm:[30,158],k:[{...ST,fx:120,TH:15,SH:-6,TH2:-20,SH2:-4,UA:25,FA:165},{...ST,fx:120,T:170,TH:15,SH:-6,TH2:-20,SH2:-4,UA:135,FA:135}]},
-  row:{prop:'bar',k:[{...ST,T:118,TH:16,SH:-10},{...ST,T:118,TH:16,SH:-10,UA:-118,FA:0}]},
-  seatedrow:{prop:'cable',cab:[215,128],k:[{a:'h',hx:85,hy:150,T:172,UA:90,FA:90,TH:108,SH:72},{a:'h',hx:85,hy:150,T:180,UA:-42,FA:90,TH:108,SH:72}]},
-  pulldown:{prop:'cable',cab:[118,8],seat:1,k:[{a:'h',hx:100,hy:112,T:168,UA:172,FA:180,TH:90,SH:0},{a:'h',hx:100,hy:112,T:166,UA:-8,FA:160,TH:90,SH:0}]},
-  pullup:{pullbar:1,k:[{a:'h',hx:110,hy:118,T:180,UA:180,FA:180,TH:8,SH:-20},{a:'h',hx:110,hy:66,T:178,UA:25,FA:172,TH:8,SH:-20}]},
-  curl:{prop:'db',k:[{...ST},{...ST,UA:6,FA:148}]},
-  pushdown:{prop:'cable',cab:[150,8],k:[{...ST,T:174,UA:4,FA:115},{...ST,T:174,UA:4,FA:2}]},
-  ohext:{prop:'cable',cab:[40,30],k:[{...ST,fx:120,T:168,TH:12,SH:-5,TH2:-18,SH2:-4,UA:150,FA:-25},{...ST,fx:120,T:168,TH:12,SH:-5,TH2:-18,SH2:-4,UA:150,FA:148}]},
-  raise:{prop:'db',k:[{...ST},{...ST,UA:88,FA:92}]},
-  pallof:{prop:'cable',cab:[215,96],k:[{...ST,TH:10,SH:-4,TH2:-10,SH2:-4,UA:12,FA:165},{...ST,TH:10,SH:-4,TH2:-10,SH2:-4,UA:90,FA:90}]},
-  facepull:{prop:'cable',cab:[215,52],k:[{...ST,T:176,UA:92,FA:92},{...ST,T:178,UA:-84,FA:168}]},
-  carry:{prop:'db',k:[{a:'h',hx:110,hy:86,T:180,UA:0,FA:0,TH:18,SH:-4,TH2:-18,SH2:-14},{a:'h',hx:110,hy:86,T:180,UA:0,FA:0,TH:-18,SH:-14,TH2:18,SH2:-4}]},
-  calf:{k:[{...ST},{...ST,dy:-9}]},
-  legpress:{sled:1,k:[{a:'h',hx:80,hy:125,T:-140,UA:20,FA:40,TH:142,SH:40},{a:'h',hx:80,hy:125,T:-140,UA:20,FA:40,TH:125,SH:124}]},
-  legcurl:{seat:1,k:[{a:'h',hx:100,hy:112,T:175,UA:10,FA:20,TH:90,SH:55},{a:'h',hx:100,hy:112,T:175,UA:10,FA:20,TH:90,SH:-35}]},
-  legext:{seat:1,k:[{a:'h',hx:100,hy:112,T:175,UA:10,FA:20,TH:90,SH:0},{a:'h',hx:100,hy:112,T:175,UA:10,FA:20,TH:90,SH:86}]},
-  hipthrust:{prop:'bar',at:'hip',bench:2,k:[{a:'f',fx:165,T:-112,UA:120,FA:60,TH:42,SH:12},{a:'f',fx:165,T:-90,UA:120,FA:60,TH:90,SH:0}]},
-  nordic:{k:[{a:'k',kx:80,T:180,TH:0,SH:-90,UA:0,FA:0},{a:'k',kx:80,T:122,TH:-58,SH:-90,UA:60,FA:80}]},
-  plank:{k:[{a:'f',fx:180,T:-103,UA:0,FA:90,TH:77,SH:77},{a:'f',fx:180,T:-104,UA:0,FA:90,TH:76,SH:76}]},
-  sideplank:{k:[{a:'f',fx:180,T:-103,UA:0,FA:90,TH:77,SH:77,UA2:170,FA2:180},{a:'f',fx:180,T:-106,UA:0,FA:90,TH:74,SH:74,UA2:175,FA2:180}]},
-  deadbug:{k:[{a:'h',hx:125,hy:150,T:-90,UA:180,FA:180,TH:180,SH:90},{a:'h',hx:125,hy:150,T:-90,UA:-95,FA:-95,TH:100,SH:95,UA2:180,FA2:180,TH2:180,SH2:90}]},
-  legraise:{pullbar:1,k:[{a:'h',hx:110,hy:112,T:180,UA:180,FA:180,TH:0,SH:0},{a:'h',hx:110,hy:112,T:178,UA:180,FA:180,TH:92,SH:92}]},
-  rollout:{prop:'wheel',k:[{a:'k',kx:80,T:128,TH:-20,SH:-90,UA:12,FA:12},{a:'k',kx:80,T:100,TH:-62,SH:-90,UA:98,FA:100}]},
-  chop:{prop:'cable',cab:[200,10],k:[{...ST,TH:12,SH:-6,TH2:-14,SH2:-4,UA:150,FA:155},{...ST,T:168,TH:12,SH:-6,TH2:-14,SH2:-4,UA:25,FA:20}]},
-  lift:{prop:'cable',cab:[20,150],k:[{...ST,T:168,TH:12,SH:-6,TH2:-14,SH2:-4,UA:-25,FA:-20},{...ST,T:184,TH:4,SH:-2,TH2:-18,SH2:-10,UA:150,FA:155}]},
-  landmine_rot:{prop:'lm',lm:[200,158],k:[{...ST,fx:100,TH:12,SH:-6,TH2:-14,SH2:-4,UA:40,FA:50},{...ST,fx:100,T:176,TH:12,SH:-6,TH2:-14,SH2:-4,UA:125,FA:120}]},
-  twist:{prop:'ball',k:[{a:'h',hx:110,hy:150,T:-150,UA:60,FA:95,TH:125,SH:60},{a:'h',hx:110,hy:150,T:-158,UA:105,FA:80,TH:125,SH:60}]},
-  jump:{k:[{...ST,T:140,UA:-45,FA:-35,TH:62,SH:-25},{...ST,dy:-30,UA:170,FA:175,TH:4,SH:4}]},
-  broad:{k:[{...ST,fx:60,T:135,UA:-50,FA:-40,TH:62,SH:-25},{...ST,fx:140,dy:-22,T:165,UA:140,FA:140,TH:35,SH:10}]},
-  clean:{prop:'bar',k:[{...ST,T:122,TH:22,SH:-10},{...ST,T:184,dy:-3,UA:0,FA:0},{...ST,T:176,TH:45,SH:-20,UA:62,FA:172}]},
-  swing:{prop:'kb',k:[{...ST,T:110,TH:24,SH:-6,UA:-22,FA:-25},{...ST,T:182,UA:95,FA:95}]},
-  slam:{prop:'ball',k:[{...ST,dy:-5,T:184,UA:176,FA:180},{...ST,T:118,TH:42,SH:-16,UA:62,FA:62}]},
-  chestpass:{prop:'ball',k:[{...ST,T:172,TH:22,SH:-10,UA:20,FA:160},{...ST,T:166,UA:90,FA:90}]},
-  rotate:{prop:'ball',k:[{...ST,fx:115,T:170,TH:20,SH:-8,TH2:-12,SH2:-4,UA:-38,FA:-30},{...ST,fx:115,T:182,TH:-4,SH:-2,TH2:-22,SH2:-12,UA:110,FA:118}]},
-  golf:{prop:'club',k:[{...ST,T:148,TH:14,SH:-8,UA:-150,FA:-100,CL:-100},{...ST,T:148,TH:14,SH:-8,UA:8,FA:8,CL:14},{...ST,T:186,TH:2,SH:-2,UA:150,FA:-170,CL:-120}]},
-  openbook:{k:[{a:'h',hx:120,hy:150,T:-90,UA:115,FA:115,TH:180,SH:90,UA2:110,FA2:110},{a:'h',hx:120,hy:150,T:-90,UA:240,FA:240,TH:180,SH:90,UA2:110,FA2:110}]},
-  sit:{k:[{a:'h',hx:100,hy:150,T:180,UA:40,FA:70,TH:90,SH:90,TH2:-90,SH2:-90},{a:'h',hx:100,hy:150,T:140,UA:80,FA:80,TH:90,SH:90,TH2:-90,SH2:-90}]},
-  cars:{k:[{...ST,TH2:90,SH2:0},{...ST,TH2:30,SH2:-60},{...ST,TH2:-40,SH2:-40}]}
-};
 
 /* ===== Testy (měření) ===== */
 const TESTS = [

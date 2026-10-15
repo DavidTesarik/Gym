@@ -890,93 +890,58 @@ function viewLib() {
 A.libFilter = el => { libFilter[el.dataset.k] = el.dataset.v; saveLibFilter(); rerender(); };
 document.addEventListener('input', e => { if (e.target.id === 'libq') { libFilter.q = e.target.value; const pos = e.target.selectionStart; rerender(); const i = $('#libq'); i.focus(); i.setSelectionRange(pos, pos); } });
 
-/* ---------- Animace (schematická postava) ---------- */
-const LEN = { T:46, UA:27, FA:25, TH:36, SH:36 };
-const vec = (a, l) => [l * Math.sin(a * Math.PI / 180), l * Math.cos(a * Math.PI / 180)];
-const add2 = (p, q) => [p[0] + q[0], p[1] + q[1]];
-const sub2 = (p, q) => [p[0] - q[0], p[1] - q[1]];
-const GY = 158;
-function solve(k) {
-  let hip;
-  if (k.a === 'h') hip = [k.hx, k.hy];
-  else if (k.a === 'k') hip = sub2([k.kx, GY - 5], vec(k.TH, LEN.TH));
-  else { const foot = [k.fx, k.fy || GY]; hip = sub2(sub2(foot, vec(k.SH, LEN.SH)), vec(k.TH, LEN.TH)); hip[1] += (k.dy || 0); }
-  const knee = add2(hip, vec(k.TH, LEN.TH)), ank = add2(knee, vec(k.SH, LEN.SH));
-  const th2 = k.TH2 ?? k.TH, sh2 = k.SH2 ?? k.SH;
-  const knee2 = add2(hip, vec(th2, LEN.TH)), ank2 = add2(knee2, vec(sh2, LEN.SH));
-  const sh = add2(hip, vec(k.T, LEN.T)), head = add2(sh, vec(k.T, 15));
-  const el = add2(sh, vec(k.UA, LEN.UA)), hand = add2(el, vec(k.FA, LEN.FA));
-  const el2 = add2(sh, vec(k.UA2 ?? k.UA, LEN.UA)), hand2 = add2(el2, vec(k.FA2 ?? k.FA, LEN.FA));
-  const toeDir = Math.abs(k.T) > 120 && Math.abs(k.T) < 240 ? 1 : 1;
-  return { hip, knee, ank, toe: add2(ank, [8 * toeDir, 0]), knee2, ank2, toe2: add2(ank2, [8, 0]), sh, head, el, hand, el2, hand2, CL: k.CL ?? k.FA };
+/* ---------- Ukázky: kreslené kroky (promítají se dokola), video ---------- */
+const IN_ARTIFACT = !!window.claude;
+const REDUCE_MOTION = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function stepCaps(ex, n) { const c = MEDIA_CAPS[ex.id]; if (c && c.length === n) return c; return ex.ph && ex.ph.length === n ? ex.ph.map(p => p.n) : null; }
+const ILL_CREDIT = 'Ilustrace: <a href="https://github.com/everkinetic/data" target="_blank" rel="noopener">Everkinetic</a> a <a href="https://github.com/bryllim/workout-guide" target="_blank" rel="noopener">Bryl Lim</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.cs" target="_blank" rel="noopener">CC BY-SA 4.0</a>, upraveno';
+function mediaHtml(ex) {
+  const ill = MEDIA_ILL[ex.id]; const v = MEDIA_VIDEO[ex.id];
+  let h = '';
+  if (ill) {
+    const caps = stepCaps(ex, ill.length);
+    h += `<div class="card demo" data-demo="ill"><div class="demo-stage">${ill.map((f, i) => `<img class="ill-img ${i === 0 ? 'on' : ''}" src="img/ill/${f}" alt="${esc(ex.n)} – ${caps ? esc(caps[i]) : 'krok ' + (i + 1)}" ${i ? 'loading="lazy"' : ''} decoding="async">`).join('')}
+      ${ill.length > 1 ? `<span class="ph-badge" data-phb>Krok 1 z ${ill.length}</span>` : ''}</div>
+      ${caps ? `<div class="demo-cap" data-cap>${esc(caps[0])}</div>` : ''}
+      ${ill.length > 1 ? `<div class="ph-steps">${ill.map((f, i) => `<button class="ph-step ${i === 0 ? 'on' : ''}" data-a="phStep" data-i="${i}" aria-label="Krok ${i + 1}${caps ? ': ' + esc(caps[i]) : ''}"><img class="ill-img" src="img/ill/${f}" alt="" loading="lazy"><span><b>${i + 1}</b></span></button>`).join('')}
+        <button class="ph-step play" data-a="phPlay" data-play aria-label="Přehrávat kroky dokola"><span data-playi>${ICON.pause}</span><span data-playt>Pauza</span></button></div>` : ''}
+      <div class="tiny faint demo-cr">${MEDIA_OWN.has(ex.id) ? 'Kresba: vlastní model ve stylu ostatních ilustrací' : ILL_CREDIT}</div></div>`;
+  }
+  if (v) {
+    if (IN_ARTIFACT) h += `<a class="btn block" href="https://www.youtube.com/watch?v=${v.v}" target="_blank" rel="noopener">${ICON.play} Video: ${esc(v.t)} ↗</a>`;
+    else h += `<div class="yt" data-yt="${v.v}"><button class="yt-lite" data-a="ytPlay" data-v="${v.v}" aria-label="Přehrát video ${esc(v.t)}"><img src="https://i.ytimg.com/vi/${v.v}/hqdefault.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="yt-btn">${ICON.play}</span></button>
+      <div class="row between" style="padding:8px 10px;gap:8px"><div class="grow" style="min-width:0"><div class="small" style="font-weight:600">${esc(v.t)}</div><div class="tiny faint">${esc(v.a)} · YouTube</div></div><a class="btn sm" href="https://www.youtube.com/watch?v=${v.v}" target="_blank" rel="noopener">Otevřít ↗</a></div></div>`;
+  } else h += `<a class="btn block" href="https://www.youtube.com/results?search_query=${encodeURIComponent(ex.n + ' exercise technique')}" target="_blank" rel="noopener">${ICON.search} Hledat video na YouTube ↗</a>`;
+  return h;
 }
-const lerp = (a, b, t) => a + (b - a) * t;
-function lerpKey(a, b, t) { const o = { ...a }; for (const k in a) if (typeof a[k] === 'number' && typeof b[k] === 'number') o[k] = lerp(a[k], b[k], t); for (const k in b) if (!(k in a)) o[k] = b[k]; return o; }
-function fillKey(k) { const o = { ...k }; for (const x of ['TH2','SH2','UA2','FA2']) if (o[x] == null) o[x] = o[x.slice(0, 2)]; if (o.dy == null) o.dy = 0; return o; }
-const P = p => p.map(n => n.toFixed(1)).join(',');
-function demoSvg(ex) {
-  const pat = PAT[ex.p]; if (!pat) return '';
-  const prop = ex.pr || pat.prop || '';
-  const ks = pat.k.map(fillKey); const s0 = solve(ks[0]);
-  let gear = '';
-  if (pat.bench === 1) gear += `<rect class="gear" x="62" y="${ks[0].hy + 8}" width="110" height="9" rx="3"/><path class="ground" d="M75 ${ks[0].hy + 17}V${GY}M160 ${ks[0].hy + 17}V${GY}"/>`;
-  if (pat.bench === 2) { const sb = solve(ks[1]).sh; gear += `<rect class="gear" x="${sb[0] - 30}" y="${sb[1] + 6}" width="40" height="${GY - sb[1] - 6}" rx="3"/>`; }
-  if (pat.seat) gear += `<rect class="gear" x="${s0.hip[0] - 22}" y="${s0.hip[1] + 6}" width="36" height="8" rx="3"/><path class="ground" d="M${s0.hip[0] - 4} ${s0.hip[1] + 14}V${GY}"/>`;
-  if (pat.box) gear += `<rect class="gear" x="${pat.box[0]}" y="${pat.box[1]}" width="${pat.box[2]}" height="${pat.box[3]}" rx="3"/>`;
-  if (ex.box) gear += `<rect class="gear" x="160" y="118" width="46" height="40" rx="3"/>`;
-  if (pat.pullbar) { const hy = Math.min(...ks.map(k => solve(k).hand[1])); gear += `<path class="prop" d="M60 ${hy - 3}H160" style="stroke:var(--ink3)"/>`; }
-  return `<svg viewBox="0 -30 220 200" role="img" aria-label="Schematická ukázka pohybu: ${esc(ex.n)}" data-demo="${ex.id}">
-    <line class="ground" x1="8" y1="${GY + 1}" x2="212" y2="${GY + 1}"/>${gear}
-    <polyline class="fig far" data-j="leg2"/><polyline class="fig far" data-j="arm2"/>
-    <g data-j="propback"></g>
-    <polyline class="fig" data-j="body"/><circle class="fig-head" r="9" data-j="head"/><polyline class="fig" data-j="arm"/>
-    <g data-j="prop" data-prop="${prop}"></g></svg>`;
+let demo = null;
+function stopDemo() { if (demo && demo.stop) demo.stop(); demo = null; }
+function setPlayBtn(root, playing) {
+  const b = root.querySelector('[data-play]'); if (!b) return;
+  b.classList.toggle('on', playing); b.querySelector('[data-playi]').innerHTML = playing ? ICON.pause : ICON.play; b.querySelector('[data-playt]').textContent = playing ? 'Pauza' : 'Přehrát';
 }
-let anim = null;
-function startDemo(root, ex) {
+function startMedia(root, ex) {
   stopDemo();
-  const svg = root.querySelector('svg[data-demo]'); if (!svg) return;
-  const pat = PAT[ex.p]; const ks = pat.k.map(fillKey); const prop = ex.pr || pat.prop || '';
-  const J = n => svg.querySelector(`[data-j="${n}"]`);
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const seg = 1100, hold = 350, n = ks.length; const cyc = n === 2 ? 2 : n; const total = cyc * (seg + hold);
-  function draw(k) {
-    const s = solve(k);
-    J('leg2').setAttribute('points', P([s.hip, s.knee2, s.ank2, s.toe2].flat()));
-    J('arm2').setAttribute('points', P([s.sh, s.el2, s.hand2].flat()));
-    J('body').setAttribute('points', P([s.sh, s.hip, s.knee, s.ank, s.toe].flat()));
-    J('arm').setAttribute('points', P([s.sh, s.el, s.hand].flat()));
-    J('head').setAttribute('cx', s.head[0].toFixed(1)); J('head').setAttribute('cy', s.head[1].toFixed(1));
-    const at = pat.at === 'shoulder' ? [s.sh[0] - 9, s.sh[1] + 2] : pat.at === 'hip' ? [s.hip[0] + 4, s.hip[1] - 12] : s.hand;
-    const [x, y] = at; let h = '';
-    if (prop === 'bar' || prop === 'trap') h = `<circle class="prop" cx="${x}" cy="${y}" r="13"/><circle class="prop-fill" cx="${x}" cy="${y}" r="3"/>`;
-    else if (prop === 'db') h = `<rect class="prop-fill" x="${x - 9}" y="${y - 4}" width="18" height="8" rx="3"/>`;
-    else if (prop === 'kb') h = `<circle class="prop-fill" cx="${x}" cy="${y + 8}" r="8"/><path class="prop" d="M${x - 5} ${y + 2}Q${x} ${y - 6} ${x + 5} ${y + 2}"/>`;
-    else if (prop === 'ball' || prop === 'wheel') h = `<circle class="prop-fill" cx="${x}" cy="${y}" r="${prop === 'ball' ? 10 : 9}"/>`;
-    else if (prop === 'club') { const e = add2(s.hand, vec(s.CL, 68)); h = `<line class="prop" x1="${x}" y1="${y}" x2="${e[0]}" y2="${e[1]}" style="stroke-width:3"/><rect class="prop-fill" x="${e[0] - 6}" y="${e[1] - 3}" width="12" height="6" rx="2" transform="rotate(${-s.CL + 90} ${e[0]} ${e[1]})"/>`; }
-    else if (prop === 'cable') h = `<line class="prop" x1="${x}" y1="${y}" x2="${pat.cab[0]}" y2="${pat.cab[1]}" style="stroke-width:2;opacity:.8"/><circle class="prop-fill" cx="${pat.cab[0]}" cy="${pat.cab[1]}" r="5"/><rect class="prop-fill" x="${x - 6}" y="${y - 3}" width="12" height="6" rx="2"/>`;
-    else if (prop === 'lm') h = `<line class="prop" x1="${x}" y1="${y}" x2="${pat.lm[0]}" y2="${pat.lm[1]}"/><circle class="prop" cx="${lerp(x, pat.lm[0], .12)}" cy="${lerp(y, pat.lm[1], .12)}" r="9"/>`;
-    if (pat.bars) h += `<path class="prop" style="stroke:var(--ink3)" d="M${x - 16} ${y + 2}H${x + 16}"/>`;
-    if (pat.sled) { const t = s.toe; h += `<path class="prop" style="stroke:var(--ink3);stroke-width:6" d="M${t[0] - 10} ${t[1] + 12}L${t[0] + 6} ${t[1] - 14}"/>`; }
-    J('prop').innerHTML = h;
-  }
-  if (reduce) { draw(ks[n - 1]); anim = { stop() {}, toggle() { this.i = ((this.i || 0) + 1) % n; draw(ks[this.i]); } }; return; }
-  let t0 = performance.now(), raf = 0, paused = false, pausedAt = 0;
-  const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-  function frame(now) {
-    if (!svg.isConnected) return;
-    const t = (((now - t0) % total) + total) % total; const idx = Math.floor(t / (seg + hold)); const lt = t - idx * (seg + hold);
-    let a, b;
-    if (n === 2) { a = ks[idx % 2]; b = ks[(idx + 1) % 2]; } else { a = ks[idx]; b = ks[(idx + 1) % n]; }
-    const f = lt < hold ? 0 : ease((lt - hold) / seg);
-    draw(lerpKey(a, b, f));
-    raf = requestAnimationFrame(frame);
-  }
-  raf = requestAnimationFrame(frame);
-  anim = { stop() { cancelAnimationFrame(raf); }, toggle() { if (paused) { t0 += performance.now() - pausedAt; paused = false; raf = requestAnimationFrame(frame); } else { paused = true; pausedAt = performance.now(); cancelAnimationFrame(raf); } return paused; } };
+  const il = root.querySelector('[data-demo="ill"]'); if (!il) return;
+  const imgs = [...il.querySelectorAll('.demo-stage img')]; const n = imgs.length; const caps = stepCaps(ex, n);
+  const steps = [...il.querySelectorAll('.ph-step:not(.play)')]; const badge = il.querySelector('[data-phb]'); const cap = il.querySelector('[data-cap]');
+  // Popsané kroky (vlastní kresby, fáze komplexního cviku) jdou dokola; volné snímky z databáze tam a zpět, ať pohyb navazuje.
+  const seq = caps || n < 3 ? imgs.map((_, i) => i) : [...imgs.keys(), ...[...imgs.keys()].slice(1, -1).reverse()];
+  let pos = 0, timer = 0, playing = n > 1 && !REDUCE_MOTION();
+  const show = k => {
+    imgs.forEach((im, i) => im.classList.toggle('on', i === k)); steps.forEach((s, i) => s.classList.toggle('on', i === k));
+    if (badge) badge.textContent = `Krok ${k + 1} z ${n}`; if (cap && caps) cap.textContent = caps[k];
+  };
+  const play = on => { playing = on && n > 1; clearInterval(timer); setPlayBtn(il, playing); if (playing) timer = setInterval(() => { pos = (pos + 1) % seq.length; show(seq[pos]); }, caps ? 1900 : 1100); };
+  show(0); play(playing);
+  demo = { stop() { clearInterval(timer); }, step(k) { play(false); pos = Math.max(0, seq.indexOf(k)); show(k); }, toggle() { play(!playing); } };
 }
-function stopDemo() { if (anim) anim.stop(); anim = null; }
-A.demoToggle = el => { if (!anim) return; const p = anim.toggle(); if (p !== undefined) el.innerHTML = p ? ICON.play : ICON.pause; };
+A.phStep = el => { demo && demo.step(+el.dataset.i); };
+A.phPlay = () => { demo && demo.toggle(); };
+A.ytPlay = el => {
+  const v = el.dataset.v; const box = el.closest('.yt');
+  el.outerHTML = `<div class="yt-frame"><iframe src="https://www.youtube-nocookie.com/embed/${v}?autoplay=1&playsinline=1&rel=0&modestbranding=1" title="Video ukázka" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>`;
+};
 
 /* ---------- Detail cviku ---------- */
 function exHistory(exId) { return (histIndex().byEx[exId] || []).map(({ w, it }) => ({ w, it, best: Math.max(0, ...it.sets.map(s => setScore(exById(exId), s))) })); }
@@ -984,12 +949,10 @@ A.exInfo = el => openExDetail(el.dataset.ex);
 function openExDetail(id) {
   const o = openSheet(() => {
     const ex = exById(id); const hist = exHistory(id); const best = hist.reduce((a, h) => Math.max(a, h.best), 0);
-    const yt = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ex.n + ' technika');
     const pts = hist.slice().reverse().map(h => ({ x: h.w.start, y: ex.t === 'wr' ? kgTo(h.best) : h.best }));
     return sheetHead(esc(ex.n), { right: ex.custom ? `<button class="iconbtn" data-a="editCustom" data-ex="${ex.id}" aria-label="Upravit vlastní cvik">${ICON.gear}</button>` : '' }) + `
     <div class="stack">
-      ${PAT[ex.p] ? `<div class="demo"><span class="cap">Schematická ukázka pohybu</span><button class="iconbtn play" data-a="demoToggle" aria-label="Pozastavit / spustit">${ICON.pause}</button>${demoSvg(ex)}</div>` : ''}
-      <a class="btn block" href="${yt}" target="_blank" rel="noopener">${ICON.play} Video ukázka na YouTube ↗</a>
+      ${mediaHtml(ex)}
       <div class="mini">${ex.m.map(m => `<span class="tag golf">${MUSCLES[m]}</span>`).join('')}${(ex.s || []).map(m => `<span class="tag">${MUSCLES[m]}</span>`).join('')}<span class="tag">${esc(ex.eq)}</span>${ex.sd ? '<span class="tag">Po stranách L/P</span>' : ''}<span class="tag">${TYPES[ex.t]}</span></div>
       ${ex.ph ? `<div class="card"><h3 class="h3" style="margin-bottom:8px">Fáze jednoho opakování · ${fmtDur(ex.ph.reduce((a, p) => a + p.s, 0))}</h3><ol class="steps">${ex.ph.map(p => `<li>${esc(p.n)} – ${p.s} s</li>`).join('')}</ol></div>` : ''}
       ${ex.st && ex.st.length && ex.st[0] ? `<div class="card"><h3 class="h3" style="margin-bottom:10px">Jak na to</h3><ol class="steps">${ex.st.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>` : ''}
@@ -1003,7 +966,7 @@ function openExDetail(id) {
       ${DB.active.w ? `<button class="btn primary block big" data-a="addToActive" data-ex="${ex.id}">${ICON.plus} Přidat do tréninku</button>` : ''}
       <button class="btn block" data-a="addToPlan" data-ex="${ex.id}">Přidat do plánu</button>
     </div>`;
-  }, { full: true, after: o => { const ex = exById(id); startDemo(o.sh, ex); }, onClose: stopDemo });
+  }, { full: true, after: o => { const ex = exById(id); startMedia(o.sh, ex); }, onClose: stopDemo });
 }
 A.addToActive = el => { const w = DB.active.w; w.ex.push({ id: uid(), ex: el.dataset.ex, ss:0, rest:null, note:'', sets: w.mode === 'interval' || w.mode === 'ladder' ? modeSets(w.mode, w.cfg, el.dataset.ex) : buildSets(el.dataset.ex, null, 3) }); saveActive(); closeSheet(); TAB = 'train'; rerender(); toast('Cvik přidán do tréninku'); };
 A.addToPlan = el => {
@@ -1638,7 +1601,7 @@ function importFile(f) {
       confirmSheet('Obnovit ze zálohy?', `Současná data se nahradí zálohou (${Object.values(d.months).reduce((a, m) => a + (m.list || []).length, 0)} tréninků).`, [{ label:'Obnovit', cls:'primary', fn: () => {
         const oldMonths = Object.keys(DB.months); DB = normalize(d); for (const m of oldMonths) if (!DB.months[m]) sync.queue.set('m-' + m, true);
         for (const k of docKeys()) touch(k); lsFlush(); while (ovStack.length) closeSheet(); render(); toast('Data obnovena'); } }]);
-    } catch { toast('Soubor není platná záloha Švihu'); } };
+    } catch { toast('Soubor není platná záloha aplikace Gym'); } };
   r.readAsText(f);
 }
 A.wipe = () => confirmSheet('Smazat všechna data?', 'Smaže tréninky, plány, testy i nastavení. Nejde vrátit. Doporučujeme nejdřív zálohu.', [
