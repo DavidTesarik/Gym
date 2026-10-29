@@ -705,7 +705,8 @@ function startHold(i, si) {
   const it = DB.active.w.ex[i]; const s = it.sets[si];
   if (DB.active.hold) { toast('Nejdřív dokonči běžící stopky'); openHoldSheet(); return; }
   const target = +s.sec || it.lo || 30;
-  DB.active.hold = { i, si, target, prep: Date.now() + 3000, beeped: 0 };
+  DB.active.hold = { i, si, target, prep: Date.now() + 3000, beeped: 0, pips: 1 };
+  scheduleCountdown(3);
   DB.active.restEnd = 0; saveActive(); rerender(); openHoldSheet();
 }
 A.hold = el => startHold(+el.dataset.i, +el.dataset.s);
@@ -728,7 +729,7 @@ function tickHold() {
   const h = DB.active.hold; const st = holdState();
   document.querySelectorAll('[data-holdtxt]').forEach(e => e.textContent = holdShort());
   if (!h || !st) return;
-  if (st.phase !== 'prep' && !h.beeped) { h.beeped = 1; vib(60); beep(1); }
+  if (st.phase !== 'prep' && !h.beeped) { h.beeped = 1; vib(60); if (!h.pips) beep(1); }
   if (st.phase === 'over' && h.beeped < 2) { h.beeped = 2; vib([200, 100, 200]); beep(); saveActive(); }
   if (!holdSheet) return; const r = holdSheet.sh;
   const lbl = r.querySelector('[data-hl]'), big = r.querySelector('[data-hb]'), bar = r.querySelector('[data-hp]'), note = r.querySelector('[data-hn]'), btn = r.querySelector('[data-hbtn]');
@@ -739,8 +740,8 @@ function tickHold() {
   else { lbl.textContent = 'Cíl splněn – drž dál, nebo zastav'; big.textContent = '+' + st.over + ' s'; bar.style.width = '100%';
     note.textContent = st.el - h.target <= HOLD_GRACE ? `Když zastavíš teď, zapíše se ${h.target} s.` : `Zapíše se celkový čas ${Math.floor(st.el)} s.`; btn.textContent = 'Stop a zapsat'; btn.dataset.a = 'holdStop'; }
 }
-A.holdNow = () => { const h = DB.active.hold; if (!h) return; h.prep = Date.now(); saveActive(); tickHold(); };
-A.holdCancel = () => { DB.active.hold = null; saveActive(); if (holdSheet) closeSheet(holdSheet); else rerender(); };
+A.holdNow = () => { const h = DB.active.hold; if (!h) return; cancelKnocks(); h.pips = 0; h.prep = Date.now(); saveActive(); tickHold(); };
+A.holdCancel = () => { cancelKnocks(); DB.active.hold = null; saveActive(); if (holdSheet) closeSheet(holdSheet); else rerender(); };
 A.holdStop = () => {
   const h = DB.active.hold; const st = holdState(); if (!h || !st) return;
   if (st.phase === 'prep') return A.holdCancel();
@@ -990,7 +991,7 @@ function openCustomEditor(id) {
     <div class="field"><span class="lbl">Zaměření</span><div class="mini">${Object.entries(FOCUS).map(([k, v]) => `<button class="chip" data-a="cuF" data-v="${k}" aria-pressed="${d.f.includes(k)}">${v}</button>`).join('')}</div></div>
     <div class="field"><label for="ct">Co zapisovat</label><select class="input" id="ct">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${d.t === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
     ${d.t === 'complex' ? `<div class="card stack" style="gap:8px"><h3 class="h3">Fáze jednoho opakování</h3>
-      <p class="tiny faint" style="margin:0">Fáze jdou za sebou bez pauzy. 3 s před každou změnou appka pípne${SET().voice ? ' a řekne další fázi' : ''}.</p>
+      <p class="tiny faint" style="margin:0">Po spuštění odpočítá 3 s pípáním, pak jdou fáze za sebou bez pauzy. 3 s před každou změnou začne ťukání, které se zrychluje až do přepnutí na další fázi (bez hlasu).</p>
       ${(d.ph || []).map((p, k) => `<div class="row" style="gap:6px"><span class="num faint" style="width:18px">${k + 1}.</span><input class="input grow" data-ph="${k}" data-pk="n" value="${esc(p.n)}" aria-label="Název fáze ${k + 1}" placeholder="Např. Plank"><input class="input num" style="width:76px;text-align:center" inputmode="numeric" data-ph="${k}" data-pk="s" value="${p.s}" aria-label="Délka fáze ${k + 1} v sekundách"><span class="small muted">s</span><button class="iconbtn" data-a="cuPhDel" data-k="${k}" aria-label="Odebrat fázi" style="color:var(--warn)">${ICON.trash}</button></div>`).join('')}
       <button class="btn sm" data-a="cuPhAdd">${ICON.plus} Přidat fázi</button>
       <div class="small muted">Jedno opakování trvá ${fmtDur((d.ph || []).reduce((a, p) => a + (+p.s || 0), 0))}.</div></div>` : ''}
@@ -1128,7 +1129,7 @@ function modeCfgForm(d) {
     <div class="row wrap" style="gap:10px">${f('work', 'Cvičení', 's')}${f('rest', 'Pauza mezi cviky', 's')}</div>
     <div class="row wrap" style="gap:10px">${f('rounds', 'Počet kol', '')}${f('rrest', 'Pauza mezi koly', 's')}</div>
     <div class="small ${n && (n < 6 || n > 12) ? '' : 'muted'}" ${n && (n < 6 || n > 12) ? 'style="color:var(--warn)"' : ''}>${n} ${plural(n, 'cvik', 'cviky', 'cviků')} v kole${n && (n < 6 || n > 12) ? ' · doporučeno 6–12' : ''} · celkem ${fmtMin(intervalTotal(c, n))}</div>
-    <p class="tiny faint" style="margin:0">Cviky jdou za sebou v pořadí seznamu. Časovač 3 s před každou změnou pípne${SET().voice ? ' a řekne, co následuje' : ''}.</p></div>`;
+    <p class="tiny faint" style="margin:0">Cviky jdou za sebou v pořadí seznamu. 3 s před každou změnou začne zrychlující se ťukání${SET().voice ? ' a hlas řekne, co následuje' : ''}.</p></div>`;
   const seq = ladderSeq(c);
   return `<div class="card stack" style="gap:10px"><h3 class="h3">Nastavení žebříku</h3>
     <div class="row wrap" style="gap:10px">${f('from', 'Začít na', 'opak.')}${f('top', 'Vrchol', 'opak.')}</div>
@@ -1140,15 +1141,42 @@ A.dMode = el => { const { d } = dayCtx(); d.mode = el.dataset.v; if (d.mode !== 
 A.dPyr = () => { const { d } = dayCtx(); d.cfg = modeCfg('ladder', d.cfg); d.cfg.pyr = d.cfg.pyr ? 0 : 1; saveState(); topSheet().refresh(); };
 
 /* ---------- Zvuk a hlas ---------- */
-function tone(freq, dur, vol = .28) {
-  if (!SET().sound) return;
-  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
-    const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = freq;
+function audio() { if (!SET().sound) return null; try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); return actx; } catch { return null; } }
+function tone(freq, dur, vol = .28, at) {
+  const a = audio(); if (!a) return null;
+  try { const t = at || a.currentTime, o = a.createOscillator(), g = a.createGain(); o.frequency.value = freq;
     g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .015); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + .02); } catch {}
+    o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + .02); return o; } catch { return null; }
+}
+/* Ťuknutí (krátký „dřívkový“ klik) naplánované na přesný čas */
+function knock(at, freq = 1500, vol = .32) {
+  const a = audio(); if (!a) return null;
+  try { const o = a.createOscillator(), g = a.createGain(); o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, at); o.frequency.exponentialRampToValueAtTime(freq * .62, at + .045);
+    g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(vol, at + .004); g.gain.exponentialRampToValueAtTime(.0001, at + .06);
+    o.connect(g).connect(a.destination); o.start(at); o.stop(at + .08); return o; } catch { return null; }
+}
+/* Zrychlující se ťukání posledních 3 s před změnou + signál změny (další fáze) nebo konce */
+const KNOCKS = [3, 2.5, 2.05, 1.66, 1.32, 1.03, .79, .59, .42, .28, .16, .06];
+let knockNodes = [];
+function cancelKnocks() { knockNodes.forEach(o => { try { o && o.stop(); } catch {} }); knockNodes = []; }
+function scheduleKnocks(left, end) {
+  const a = audio(); if (!a) return;
+  cancelKnocks(); const t0 = a.currentTime;
+  KNOCKS.filter(o => o < left - .02).forEach((o, i, arr) => knockNodes.push(knock(t0 + left - o, 1250 + (3 - o) * 170)));
+  const at = t0 + left;
+  if (end) [[880, 0], [1175, .16], [1568, .32]].forEach(([f, d]) => knockNodes.push(tone(f, d === .32 ? .6 : .2, .3, at + d)));
+  else knockNodes.push(tone(1320, .32, .3, at), tone(1760, .25, .2, at + .1));
+}
+/* Odpočet před startem: pípnutí 3, 2, 1 a delší vyšší tón ve chvíli startu */
+function scheduleCountdown(left) {
+  const a = audio(); if (!a) return;
+  cancelKnocks(); const t0 = a.currentTime;
+  [3, 2, 1].filter(k => k <= left + .05).forEach(k => knockNodes.push(tone(880, .13, .3, t0 + Math.max(0, left - k))));
+  knockNodes.push(tone(1320, .45, .32, t0 + left));
 }
 function say(text) {
-  if (!SET().voice || !('speechSynthesis' in window)) return;
+  if (!text || !SET().voice || !('speechSynthesis' in window)) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'cs-CZ'; u.rate = 1.05;
     const v = speechSynthesis.getVoices().find(v => /^cs/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch {}
 }
@@ -1163,11 +1191,11 @@ function startTimer(tm) {
   if (DB.active.hold) { toast('Nejdřív dokonči běžící stopky'); return; }
   tm.start = Date.now(); tm.pauseAcc = 0; tm.pausedAt = 0; tm.fired = {};
   DB.active.tm = tm; DB.active.restEnd = 0; saveActive();
-  tone(660, .08, .01); say(tm.segs[0].kind === 'prep' ? 'Připrav se. Začínáme: ' + nextLabel(tm, 0) : '');
+  tone(660, .08, .01); if (tm.type !== 'complex' && tm.segs[0].kind === 'prep') say('Připrav se. Začínáme: ' + nextLabel(tm, 0));
   rerender(); openTimerSheet();
 }
 function complexSegs(ex, reps) {
-  const segs = [{ kind:'prep', dur:5, label:'Připrav se' }]; const ph = ex.ph || [];
+  const segs = [{ kind:'prep', dur:3, label:'Připrav se' }]; const ph = ex.ph || [];
   for (let r = 1; r <= reps; r++) ph.forEach((p, k) => segs.push({ kind:'work', dur: p.s, label: p.n, r, of: reps, pi: k + 1, pn: ph.length }));
   return segs;
 }
@@ -1201,14 +1229,18 @@ function openTimerSheet() {
   if (!DB.active.tm || tmSheet) return;
   tmSheet = openSheet(() => `<div class="tm" data-kind="prep">
       <div class="row between"><div class="tm-top" data-t="top"></div><button class="iconbtn" data-a="closeSheet" aria-label="Skrýt časovač (poběží dál)">${ICON.close}</button></div>
-      <div class="tm-kind" data-t="kind"></div>
-      <div class="tm-name" data-t="name"></div>
-      <div class="tm-big num" data-t="big"></div>
-      <div class="tm-next" data-t="next"></div>
-      <div class="tm-prog"><i data-t="prog"></i></div>
-      <div class="tiny" data-t="total" style="text-align:center;opacity:.8"></div>
-      <div class="row" style="gap:10px"><button class="btn big grow" data-a="tmPause" data-t="pause">Pauza</button><button class="btn big grow" data-a="tmSkip">Přeskočit</button></div>
-      <button class="btn ghost block tm-end" data-a="tmEnd">Ukončit a zapsat</button></div>`,
+      <div class="tm-main">
+        <div class="tm-kind" data-t="kind"></div>
+        <div class="tm-name" data-t="name"></div>
+        <div class="tm-big num" data-t="big"></div>
+        <div class="tm-next" data-t="next"></div>
+      </div>
+      <div class="tm-foot">
+        <div class="tm-prog"><i data-t="prog"></i></div>
+        <div class="tiny" data-t="total" style="text-align:center;opacity:.8"></div>
+        <div class="row" style="gap:10px"><button class="btn big grow" data-a="tmPause" data-t="pause">Pauza</button><button class="btn big grow" data-a="tmSkip">Přeskočit</button></div>
+        <button class="btn ghost block tm-end" data-a="tmEnd">Ukončit a zapsat</button>
+      </div></div>`,
     { full: true, modal: true, after: () => tickTimer(), onClose: () => { tmSheet = null; rerender(); } });
 }
 function tickTimer() {
@@ -1219,10 +1251,18 @@ function tickTimer() {
   if (!loc) { finishTimer(false); return; }
   const f = tm.fired;
   if (!tm.pausedAt) {
-    if (loc.idx > 0 && el - loc.startAt < 1 && !f[loc.idx + 's']) { f[loc.idx + 's'] = 1; tone(loc.seg.kind === 'work' ? 1320 : 520, .38); vib(loc.seg.kind === 'work' ? [80, 60, 80] : 120); if (loc.seg.kind !== 'work' && !f[loc.idx + 'v']) { f[loc.idx + 'v'] = 1; say('Pauza. Další: ' + nextLabel(tm, loc.idx)); } }
-    const n = Math.ceil(loc.left);
-    if (n <= 3 && n >= 1 && loc.left > n - 1 && !f[loc.idx + ':' + n] && loc.seg.dur > 3) {
-      f[loc.idx + ':' + n] = 1; tone(880, .12); if (n === 3) { const nx = nextLabel(tm, loc.idx); if (nx && loc.seg.kind === 'work') say('Další: ' + nx); else if (!nx) say('Poslední tři sekundy'); }
+    // vstup do nového úseku: vibrace; zvuk jen pokud nebyl naplánovaný (např. po přeskočení)
+    if (loc.idx > 0 && el - loc.startAt < 1 && !f[loc.idx + 'e']) {
+      f[loc.idx + 'e'] = 1; vib(loc.seg.kind === 'work' ? [80, 60, 80] : 120);
+      if (!f[loc.idx + 's']) { f[loc.idx + 's'] = 1; tone(loc.seg.kind === 'work' ? 1320 : 520, .38); }
+      if (tm.type !== 'complex' && loc.seg.kind !== 'work' && !f[loc.idx + 'v']) { f[loc.idx + 'v'] = 1; say('Pauza. Další: ' + nextLabel(tm, loc.idx)); }
+    }
+    // poslední 3 s úseku: před startem pípání 3-2-1, jinak zrychlující se ťukání; na konci signál změny / konce (bez hlasu)
+    if (loc.left <= 3.4 && loc.seg.dur > 1.5 && !f[loc.idx + 't']) {
+      const last = loc.idx === tm.segs.length - 1;
+      f[loc.idx + 't'] = 1; f[(loc.idx + 1) + 's'] = 1; if (last) f.end = 1;
+      if (loc.seg.kind === 'prep') scheduleCountdown(loc.left); else scheduleKnocks(loc.left, last);
+      if (tm.type !== 'complex' && loc.seg.kind === 'work') { const nx = nextLabel(tm, loc.idx); if (nx) say('Další: ' + nx); }
     }
   }
   document.querySelectorAll('[data-tmtxt]').forEach(e => e.textContent = Math.ceil(loc.left));
@@ -1237,14 +1277,21 @@ function tickTimer() {
   q('total').textContent = 'Zbývá celkem ' + fmtDur(Math.ceil(tot - el));
   q('pause').textContent = tm.pausedAt ? 'Pokračovat' : 'Pauza';
 }
-A.tmPause = () => { const tm = DB.active.tm; if (!tm) return; if (tm.pausedAt) { tm.pauseAcc += Date.now() - tm.pausedAt; tm.pausedAt = 0; } else { tm.pausedAt = Date.now(); try { speechSynthesis.cancel(); } catch {} } saveActive(); tickTimer(); };
-A.tmSkip = () => { const tm = DB.active.tm; if (!tm) return; const loc = tmLocate(tm, tmEl(tm)); if (!loc) return; tm.start -= loc.left * 1000 + 5; saveActive(); tickTimer(); };
-A.tmEnd = () => finishTimer(true);
+/* Při pauze/přeskočení zrušit naplánované ťukání, ať se po pokračování naplánuje znovu podle skutečného času */
+function resetKnocks(tm, idx) { cancelKnocks(); const f = tm.fired; delete f[idx + 't']; delete f[(idx + 1) + 's']; delete f.end; }
+A.tmPause = () => {
+  const tm = DB.active.tm; if (!tm) return; const loc = tmLocate(tm, tmEl(tm));
+  if (tm.pausedAt) { tm.pauseAcc += Date.now() - tm.pausedAt; tm.pausedAt = 0; }
+  else { tm.pausedAt = Date.now(); try { speechSynthesis.cancel(); } catch {} if (loc) resetKnocks(tm, loc.idx); }
+  saveActive(); tickTimer();
+};
+A.tmSkip = () => { const tm = DB.active.tm; if (!tm) return; const loc = tmLocate(tm, tmEl(tm)); if (!loc) return; resetKnocks(tm, loc.idx); tm.start -= loc.left * 1000 + 5; saveActive(); tickTimer(); };
+A.tmEnd = () => { cancelKnocks(); finishTimer(true); };
 function stopTimer(silent) { if (!DB.active.tm) return; DB.active.tm = null; if (tmSheet) { const o = tmSheet; tmSheet = null; o.opts.onClose = null; closeSheet(o); } if (!silent) rerender(); }
 function finishTimer(early) {
   const tm = DB.active.tm; if (!tm) return; const el = tmEl(tm);
   try { speechSynthesis.cancel(); } catch {}
-  if (!early) { tone(1320, .5); vib([200, 100, 200, 100, 300]); say(tm.type === 'complex' ? 'Hotovo' : 'Hotovo, skvělá práce'); }
+  if (!early) { if (!tm.fired.end) scheduleKnocks(0, true); vib([200, 100, 200, 100, 300]); }
   if (tm.type === 'complex') {
     let acc = 0, reps = 0; for (const sg of tm.segs) { acc += sg.dur; if (acc <= el + .01 && sg.kind === 'work' && sg.pi === sg.pn) reps = sg.r; }
     stopTimer(true);
@@ -1547,7 +1594,7 @@ function openSettings() {
         ${tg('vib', 'Vibrace na konci pauzy', 'Funguje jen na telefonech, které to podporují')}
         ${tg('sound', 'Zvuk na konci pauzy')}
         ${tg('rpe', 'Zapisovat náročnost (RPE)', 'Nastavíš ji klepnutím na číslo série')}
-        ${tg('voice', 'Hlásit další cvik hlasem', 'Intervaly a komplexní cviky: 3 s před změnou řekne, co následuje')}
+        ${tg('voice', 'Hlásit další cvik hlasem', 'Jen intervaly: 3 s před změnou řekne, co následuje. Změny vždy ohlásí zrychlující se ťukání.')}
         ${sg('weekGoal', 'Týdenní cíl tréninků', [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']])}
         ${sg('bar', 'Váha osy (kalkulačka kotoučů)', [[20, '20 kg'], [15, '15 kg'], [10, '10 kg']])}
       </div>

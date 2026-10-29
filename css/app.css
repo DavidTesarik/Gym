@@ -159,13 +159,18 @@ button.li:hover{background:var(--surface2)}
 .hold-big{text-align:center;font-weight:700;font-size:96px;line-height:1;font-variant-numeric:tabular-nums}
 .hold-sheet[data-phase="over"] .hold-big,.hold-sheet[data-phase="over"] .hold-lbl{color:var(--accent)}
 .hold-sheet[data-phase="prep"] .hold-big{color:var(--gold)}
-.tm{display:flex;flex-direction:column;gap:14px;min-height:calc(100vh - 40px);padding-block:8px 16px;border-radius:18px}
+/* Časovač přes celou obrazovku: obsah se vždy vejde (flex), tlačítka dole nad domovskou lištou */
+.sheet.full:has(.tm){display:flex;flex-direction:column;overflow:hidden}
+.tm{display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0;padding-block:4px 2px}
+.tm-main{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:12px}
+.tm-foot{display:flex;flex-direction:column;gap:10px;flex:none;margin-top:auto}
 .tm-top{font-weight:700;font-size:15px;opacity:.85}
-.tm-kind{font-weight:800;font-size:16px;letter-spacing:.1em;text-transform:uppercase;text-align:center;margin-top:12px}
+.tm-kind{font-weight:800;font-size:15px;letter-spacing:.1em;text-transform:uppercase;text-align:center}
 .tm-name{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1.1;text-align:center;text-wrap:balance;min-height:1.1em}
 .tm-big{font-weight:700;font-size:min(34vw,150px);line-height:1;text-align:center;font-variant-numeric:tabular-nums;margin:8px 0}
 .tm-next{text-align:center;font-size:17px;font-weight:600;opacity:.85;min-height:1.4em}
-.tm-prog{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:auto}
+@media (max-height:640px){.tm-big{font-size:clamp(56px,13vh,110px)}}
+.tm-prog{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
 .tm-prog i{display:block;height:100%;background:var(--accent);transition:width .25s linear}
 .sheet.full:has(.tm[data-kind="work"]){background:var(--accent);color:var(--accent-ink)}
 .sheet.full:has(.tm[data-kind="work"]) .iconbtn{color:var(--accent-ink)}
