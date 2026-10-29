@@ -45,7 +45,9 @@ const DEFAULT_SETTINGS = { unit:'kg', inc:2.5, rest:120, autoRest:true, vib:true
   sndStart:'beeps', sndStartLen:3, sndStartVoice:'beep', sndStartTone:'double',
   sndChg:'accel', sndChgLen:3, sndChgVoice:'knock', sndChgTone:'double', sndEndTone:'fanfare', sndEndVoice:'beep',
   sndHold:'none', sndHoldLen:3, sndHoldVoice:'beep', sndHoldTone:'triple',
-  sndRest:'none', sndRestLen:3, sndRestVoice:'beep', sndRestTone:'triple' };
+  sndRest:'none', sndRestLen:3, sndRestVoice:'beep', sndRestTone:'triple',
+  // hlasová hlášení (syntéza řeči)
+  sndVoiceName:'', sndRate:1.05, sndStartSay:false, sndChgSay:false, sndEndSay:false, sndHoldSay:false, sndRestSay:false };
 const LS_KEY = 'svih.v1';
 let DB = {
   state: { _u:0, settings:{...DEFAULT_SETTINGS}, programs:[], activeProgramId:null, custom:[], tests:[], bw:[], meta:{ onboarded:false, lastBackup:0 } },
@@ -707,7 +709,7 @@ function startHold(i, si) {
   const target = +s.sec || it.lo || 30;
   const prep = +SET().sndPrep || 3;
   DB.active.hold = { i, si, target, prep: Date.now() + prep * 1000, beeped: 0, pips: 1 };
-  signal('hold', 'start', prep);
+  signal('hold', 'start', prep); sayIf('sndStartSay', 'Připrav se: ' + exById(it.ex).n);
   DB.active.restEnd = 0; saveActive(); rerender(); openHoldSheet();
 }
 A.hold = el => startHold(+el.dataset.i, +el.dataset.s);
@@ -733,7 +735,7 @@ function tickHold() {
   if (st.phase !== 'prep' && !h.beeped) { h.beeped = 1; vib(60); if (!h.pips) signalNow('hold', 'start'); }
   // odpočet před splněním cíle (podle nastavení zvuků) a tón při splnění
   if (st.phase === 'run' && !h.tgt) { const left = h.target - st.el; if (left <= sndLead('hold')) { h.tgt = 1; signal('hold', 'hold', left); saveActive(); } }
-  if (st.phase === 'over' && h.beeped < 2) { h.beeped = 2; vib([200, 100, 200]); if (!h.tgt) signalNow('hold', 'hold'); saveActive(); }
+  if (st.phase === 'over' && h.beeped < 2) { h.beeped = 2; vib([200, 100, 200]); if (!h.tgt) signalNow('hold', 'hold'); sayIf('sndHoldSay', 'Cíl splněn'); saveActive(); }
   if (!holdSheet) return; const r = holdSheet.sh;
   const lbl = r.querySelector('[data-hl]'), big = r.querySelector('[data-hb]'), bar = r.querySelector('[data-hp]'), note = r.querySelector('[data-hn]'), btn = r.querySelector('[data-hbtn]');
   if (!big) return;
@@ -790,7 +792,7 @@ setInterval(() => {
     // odpočet před koncem pauzy podle nastavení; při změně délky pauzy se přeplánuje
     if (restSched && restSched !== DB.active.restEnd) { sndCancel('rest'); restSched = 0; }
     if (left > 0 && !restSched && left / 1000 <= sndLead('rest')) { restSched = DB.active.restEnd; signal('rest', 'rest', left / 1000); }
-    if (left <= 0 && !restFired) { restFired = true; vib([200, 100, 200]); if (restSched !== DB.active.restEnd) signalNow('rest', 'rest'); }
+    if (left <= 0 && !restFired) { restFired = true; vib([200, 100, 200]); if (restSched !== DB.active.restEnd) signalNow('rest', 'rest'); sayIf('sndRestSay', 'Pauza skončila, další série'); }
     if (left < -4000) { DB.active.restEnd = 0; }
     renderRestBar();
   }
@@ -1136,7 +1138,7 @@ function modeCfgForm(d) {
     <div class="row wrap" style="gap:10px">${f('work', 'Cvičení', 's')}${f('rest', 'Pauza mezi cviky', 's')}</div>
     <div class="row wrap" style="gap:10px">${f('rounds', 'Počet kol', '')}${f('rrest', 'Pauza mezi koly', 's')}</div>
     <div class="small ${n && (n < 6 || n > 12) ? '' : 'muted'}" ${n && (n < 6 || n > 12) ? 'style="color:var(--warn)"' : ''}>${n} ${plural(n, 'cvik', 'cviky', 'cviků')} v kole${n && (n < 6 || n > 12) ? ' · doporučeno 6–12' : ''} · celkem ${fmtMin(intervalTotal(c, n))}</div>
-    <p class="tiny faint" style="margin:0">Cviky jdou za sebou v pořadí seznamu. Před každou změnou zazní odpočet${SET().voice ? ' a hlas řekne, co následuje' : ''} (nastavíš v Nastavení → Zvuky a odpočty).</p></div>`;
+    <p class="tiny faint" style="margin:0">Cviky jdou za sebou v pořadí seznamu. Před každou změnou zazní odpočet${SET().sndChgSay ? ' a hlas řekne, co následuje' : ''} (nastavíš v Nastavení → Zvuky a odpočty).</p></div>`;
   const seq = ladderSeq(c);
   return `<div class="card stack" style="gap:10px"><h3 class="h3">Nastavení žebříku</h3>
     <div class="row wrap" style="gap:10px">${f('from', 'Začít na', 'opak.')}${f('top', 'Vrchol', 'opak.')}</div>
@@ -1225,11 +1227,17 @@ function signalNow(ch, kind) { signal(ch, kind, 0); }
 /* zpětná kompatibilita */
 function tone(freq, dur, vol = .28, at) { const a = audio(); if (!a) return null; return blip(at || a.currentTime, freq, 'beep', dur / .12)[0] || null; }
 function cancelKnocks() { sndCancel('tm'); }
+/* Hlas (syntéza řeči): řídí se přepínači „Hlásit hlasem“ u jednotlivých událostí v nastavení zvuků */
+function ttsVoices() { try { return speechSynthesis.getVoices().filter(v => /^cs/i.test(v.lang)); } catch { return []; } }
 function say(text) {
-  if (!text || !SET().voice || !('speechSynthesis' in window)) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'cs-CZ'; u.rate = 1.05;
-    const v = speechSynthesis.getVoices().find(v => /^cs/i.test(v.lang)); if (v) u.voice = v; speechSynthesis.speak(u); } catch {}
+  if (!text || !SET().sound || !('speechSynthesis' in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'cs-CZ'; u.rate = +SET().sndRate || 1.05; u.volume = Math.min(1, (SET().sndVol ?? 80) / 80);
+    const all = speechSynthesis.getVoices(), want = SET().sndVoiceName;
+    const v = (want && all.find(x => x.voiceURI === want || x.name === want)) || all.find(x => /^cs/i.test(x.lang)); if (v) { u.voice = v; u.lang = v.lang; }
+    speechSynthesis.speak(u); } catch {}
 }
+const sayIf = (k, text) => { if (SET()[k]) say(text); };
+const lastSecs = n => n === 5 ? 'Posledních pět sekund' : n === 10 ? 'Posledních deset sekund' : 'Poslední tři sekundy';
 
 /* ---------- Časovač (komplexní cvik i intervaly) ---------- */
 let tmSheet = null;
@@ -1241,7 +1249,7 @@ function startTimer(tm) {
   if (DB.active.hold) { toast('Nejdřív dokonči běžící stopky'); return; }
   tm.start = Date.now(); tm.pauseAcc = 0; tm.pausedAt = 0; tm.fired = {};
   DB.active.tm = tm; DB.active.restEnd = 0; saveActive();
-  audio(); if (tm.type !== 'complex' && tm.segs[0].kind === 'prep') say('Připrav se. Začínáme: ' + nextLabel(tm, 0));
+  audio(); if (tm.segs[0].kind === 'prep') sayIf('sndStartSay', 'Připrav se. Začínáme: ' + nextLabel(tm, 0));
   rerender(); openTimerSheet();
 }
 function complexSegs(ex, reps) {
@@ -1305,14 +1313,15 @@ function tickTimer() {
     if (loc.idx > 0 && el - loc.startAt < 1 && !f[loc.idx + 'e']) {
       f[loc.idx + 'e'] = 1; vib(loc.seg.kind === 'work' ? [80, 60, 80] : 120);
       if (!f[loc.idx + 's']) { f[loc.idx + 's'] = 1; if (loc.seg.kind === 'work') signalNow('tm', 'chg'); else blip(audio() ? actx.currentTime : 0, sndBase() * .6, SET().sndChgVoice, 2); }
-      if (tm.type !== 'complex' && loc.seg.kind !== 'work' && !f[loc.idx + 'v']) { f[loc.idx + 'v'] = 1; say('Pauza. Další: ' + nextLabel(tm, loc.idx)); }
+      if (loc.seg.kind !== 'work' && !f[loc.idx + 'v']) { f[loc.idx + 'v'] = 1; sayIf('sndChgSay', 'Pauza. Další: ' + nextLabel(tm, loc.idx)); }
     }
-    // před koncem úseku odpočet podle nastavení zvuků (start / změna / konec), bez hlasu
+    // před koncem úseku odpočet podle nastavení zvuků (start / změna / konec), hlas jen když je zapnutý
     const last = loc.idx === tm.segs.length - 1, kind = loc.seg.kind === 'prep' ? 'start' : last ? 'end' : 'chg';
     if (loc.left <= sndLead(kind) && loc.seg.dur > 1.5 && !f[loc.idx + 't']) {
       f[loc.idx + 't'] = 1; f[(loc.idx + 1) + 's'] = 1; if (last) f.end = 1;
       signal('tm', kind, loc.left);
-      if (tm.type !== 'complex' && loc.seg.kind === 'work') { const nx = nextLabel(tm, loc.idx); if (nx) say('Další: ' + nx); }
+      if (kind === 'chg' && loc.seg.kind === 'work') { const nx = nextLabel(tm, loc.idx); if (nx) sayIf('sndChgSay', 'Další: ' + nx); }
+      else if (kind === 'end') sayIf('sndEndSay', lastSecs(+SET().sndChgLen));
     }
   }
   document.querySelectorAll('[data-tmtxt]').forEach(e => e.textContent = Math.ceil(loc.left));
@@ -1341,7 +1350,7 @@ function stopTimer(silent) { if (!DB.active.tm) return; DB.active.tm = null; if 
 function finishTimer(early) {
   const tm = DB.active.tm; if (!tm) return; const el = tmEl(tm);
   try { speechSynthesis.cancel(); } catch {}
-  if (!early) { if (!tm.fired.end) signalNow('tm', 'end'); vib([200, 100, 200, 100, 300]); }
+  if (!early) { if (!tm.fired.end) signalNow('tm', 'end'); vib([200, 100, 200, 100, 300]); sayIf('sndEndSay', tm.type === 'complex' ? 'Hotovo' : 'Hotovo, skvělá práce'); }
   if (tm.type === 'complex') {
     let acc = 0, reps = 0; for (const sg of tm.segs) { acc += sg.dur; if (acc <= el + .01 && sg.kind === 'work' && sg.pi === sg.pn) reps = sg.r; }
     stopTimer(true);
@@ -1666,11 +1675,12 @@ function openSettings() {
   o.sh.addEventListener('change', e => { if (e.target.id === 'impf' && e.target.files[0]) importFile(e.target.files[0]); });
 }
 /* ---------- Zvuky a odpočty ---------- */
-const SND_KEYS = ['sndVol', 'sndPitch', 'sndPrep', 'sndIvPrep', 'sndStart', 'sndStartLen', 'sndStartVoice', 'sndStartTone', 'sndChg', 'sndChgLen', 'sndChgVoice', 'sndChgTone', 'sndEndTone', 'sndEndVoice', 'sndHold', 'sndHoldLen', 'sndHoldVoice', 'sndHoldTone', 'sndRest', 'sndRestLen', 'sndRestVoice', 'sndRestTone'];
+const SND_KEYS = ['sndVoiceName', 'sndRate', 'sndStartSay', 'sndChgSay', 'sndEndSay', 'sndHoldSay', 'sndRestSay', 'sndVol', 'sndPitch', 'sndPrep', 'sndIvPrep', 'sndStart', 'sndStartLen', 'sndStartVoice', 'sndStartTone', 'sndChg', 'sndChgLen', 'sndChgVoice', 'sndChgTone', 'sndEndTone', 'sndEndVoice', 'sndHold', 'sndHoldLen', 'sndHoldVoice', 'sndHoldTone', 'sndRest', 'sndRestLen', 'sndRestVoice', 'sndRestTone'];
 const sndName = (list, v) => (list.find(x => x[0] === v) || ['', v])[1];
 function sndSummary() {
   const s = SET(); if (!s.sound) return 'Zvuky vypnuté' + (s.vib ? ' · vibrace zapnuté' : '');
-  return `Start: ${sndName(SND_STYLES, s.sndStart).toLowerCase()} · změna: ${sndName(SND_STYLES, s.sndChg).toLowerCase()} · hlasitost ${s.sndVol} %`;
+  const said = ['sndStartSay', 'sndChgSay', 'sndEndSay', 'sndHoldSay', 'sndRestSay'].some(k => s[k]);
+  return `Start: ${sndName(SND_STYLES, s.sndStart).toLowerCase()} · změna: ${sndName(SND_STYLES, s.sndChg).toLowerCase()}${said ? ' · hlas zapnutý' : ''} · hlasitost ${s.sndVol} %`;
 }
 function sndSection(k) { return /^sndStart|^sndPrep/.test(k) ? 'start' : /^sndChg/.test(k) ? 'chg' : /^sndEnd/.test(k) ? 'end' : /^sndHold/.test(k) ? 'hold' : /^sndRest/.test(k) ? 'rest' : null; }
 A.soundSettings = () => openSoundSettings();
@@ -1685,13 +1695,18 @@ function openSoundSettings() {
     const lens = l => l.map(v => [v, v + ' s']);
     const pitchLbl = p => p == 0 ? 'Výchozí' : (p > 0 ? 'Vyšší +' : 'Nižší ') + p;
     const off = s.sound ? '' : ' style="opacity:.45"';
+    const vs = ttsVoices(); const rateLbl = r => (+r).toFixed(2).replace('.', ',') + '×';
     return sheetHead('Zvuky a odpočty', { close: true }) + `<div class="stack">
       ${head('Obecné')}<div class="list">
         ${tg('sound', 'Zvuky', 'Na iPhonu zkontroluj, že není zapnutý tichý režim – jinak může být pípání ztlumené.')}
         <div class="li" style="flex-direction:column;align-items:stretch;gap:6px"${off}><div class="row between"><span style="font-weight:600">Hlasitost</span><span class="small muted num" data-sndl="sndVol">${s.sndVol} %</span></div><input type="range" class="range" min="10" max="100" step="5" value="${s.sndVol}" data-snd="sndVol" aria-label="Hlasitost"></div>
         <div class="li" style="flex-direction:column;align-items:stretch;gap:6px"${off}><div class="row between"><span style="font-weight:600">Výška tónů</span><span class="small muted" data-sndl="sndPitch">${pitchLbl(s.sndPitch)}</span></div><input type="range" class="range" min="-12" max="12" step="1" value="${s.sndPitch}" data-snd="sndPitch" aria-label="Výška tónů"></div>
         ${tg('vib', 'Vibrace', 'Na konci pauzy, při změně fáze a na konci cviku. Jen na telefonech, které to podporují (iPhone ne).')}
-        ${tg('voice', 'Hlásit další cvik hlasem', 'Jen u intervalů a tabaty. Komplexní cviky (např. plankový okruh) nikdy nemluví.')}
+      </div>
+      ${head('Hlas', null, 'Hlášení hlasem zapneš u každé události níže zvlášť')}<div class="list"${off}>
+        ${row('Hlas', vs.length ? `<div class="optwrap"><button class="chip" aria-pressed="${!s.sndVoiceName}" data-a="sndVoicePick" data-v="">Automaticky</button>${vs.map(v => `<button class="chip" aria-pressed="${s.sndVoiceName === v.voiceURI}" data-a="sndVoicePick" data-v="${esc(v.voiceURI)}">${esc(v.name)}${v.localService === false ? ' ☁' : ''}</button>`).join('')}</div>` : '<div class="small muted">Český hlas se v tomto zařízení zatím nenačetl – použije se výchozí hlas systému. Další hlasy přidáš v iPhonu: Nastavení → Zpřístupnění → Předčítaný obsah → Hlasy → Čeština.</div>')}
+        <div class="li" style="flex-direction:column;align-items:stretch;gap:6px"><div class="row between"><span style="font-weight:600">Rychlost řeči</span><span class="small muted num" data-sndl="sndRate">${rateLbl(s.sndRate)}</span></div><input type="range" class="range" min="0.7" max="1.5" step="0.05" value="${s.sndRate}" data-snd="sndRate" aria-label="Rychlost řeči"></div>
+        <div class="li"><button class="btn sm" data-a="sndSayTest">${ICON.play} Vyzkoušet hlas</button></div>
       </div>
       <div class="stack" style="gap:10px"${off}>
       ${head('Po spuštění cviku', 'start', 'Komplexní cviky, intervaly i výdrž na čas')}<div class="list">
@@ -1701,37 +1716,43 @@ function openSoundSettings() {
         ${row('Délka odpočtu', seg('sndStartLen', lens([3, 5])))}
         ${row('Zvuk odpočtu', chips('sndStartVoice', SND_VOICES))}
         ${row('Tón ve chvíli startu', chips('sndStartTone', SND_TONES))}
+        ${tg('sndStartSay', 'Hlásit hlasem', '„Připrav se. Začínáme: Plank“')}
       </div>
       ${head('Před změnou fáze nebo cviku', 'chg', 'Komplexní cviky (strana planku…), intervaly a pauzy mezi nimi')}<div class="list">
         ${row('Odpočet', seg('sndChg', SND_STYLES))}
         ${row('Délka odpočtu', seg('sndChgLen', lens([3, 5])))}
         ${row('Zvuk odpočtu', chips('sndChgVoice', SND_VOICES))}
         ${row('Tón při změně', chips('sndChgTone', SND_TONES))}
+        ${tg('sndChgSay', 'Hlásit hlasem', '„Další: Boční plank P“ na začátku odpočtu, u intervalů i „Pauza. Další: …“')}
       </div>
       ${head('Konec cviku', 'end', 'Odpočet před koncem je stejný jako před změnou fáze')}<div class="list">
         ${row('Tón na konci', chips('sndEndTone', SND_TONES))}
         ${row('Zvuk tónu', chips('sndEndVoice', SND_VOICES))}
+        ${tg('sndEndSay', 'Hlásit hlasem', '„Poslední tři sekundy“ a na konci „Hotovo“')}
       </div>
       ${head('Výdrž na čas', 'hold', 'Stopky u cviků jako plank – splnění cílového času')}<div class="list">
         ${row('Odpočet před splněním cíle', seg('sndHold', SND_STYLES))}
         ${row('Délka odpočtu', seg('sndHoldLen', lens([3, 5])))}
         ${row('Zvuk odpočtu', chips('sndHoldVoice', SND_VOICES))}
         ${row('Tón při splnění cíle', chips('sndHoldTone', SND_TONES))}
+        ${tg('sndHoldSay', 'Hlásit hlasem', '„Připrav se: Plank“ a po splnění „Cíl splněn“ (hlášení na startu se řídí přepínačem u startu)')}
       </div>
       ${head('Konec pauzy mezi sériemi', 'rest')}<div class="list">
         ${row('Odpočet před koncem pauzy', seg('sndRest', SND_STYLES))}
         ${row('Délka odpočtu', seg('sndRestLen', lens([3, 5, 10])))}
         ${row('Zvuk odpočtu', chips('sndRestVoice', SND_VOICES))}
         ${row('Tón na konci pauzy', chips('sndRestTone', SND_TONES))}
+        ${tg('sndRestSay', 'Hlásit hlasem', '„Pauza skončila, další série“')}
       </div>
       </div>
       <button class="btn block" data-a="sndReset">Obnovit výchozí zvuky</button></div>`;
-  }, { full: true, onClose: () => { sndCancel('demo'); topSheet() && topSheet().refresh(); } });
+  }, { full: true, onClose: () => { sndCancel('demo'); try { speechSynthesis.onvoiceschanged = null; speechSynthesis.cancel(); } catch {} topSheet() && topSheet().refresh(); } });
+  try { if ('speechSynthesis' in window) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => { if (topSheet() === o) o.refresh(); }; } } catch {}
   o.sh.addEventListener('input', e => {
     const k = e.target.dataset.snd; if (!k) return; SET()[k] = +e.target.value;
-    const l = o.sh.querySelector(`[data-sndl="${k}"]`); if (l) l.textContent = k === 'sndVol' ? e.target.value + ' %' : (+e.target.value === 0 ? 'Výchozí' : (+e.target.value > 0 ? 'Vyšší +' : 'Nižší ') + e.target.value);
+    const l = o.sh.querySelector(`[data-sndl="${k}"]`); if (l) l.textContent = k === 'sndVol' ? e.target.value + ' %' : k === 'sndRate' ? (+e.target.value).toFixed(2).replace('.', ',') + '×' : (+e.target.value === 0 ? 'Výchozí' : (+e.target.value > 0 ? 'Vyšší +' : 'Nižší ') + e.target.value);
   });
-  o.sh.addEventListener('change', e => { const k = e.target.dataset.snd; if (!k) return; saveState(); sndCancel('demo'); const a = audio(); if (a) sndCh.demo = blip(a.currentTime, sndBase(), SET().sndChgVoice, 1.5); });
+  o.sh.addEventListener('change', e => { const k = e.target.dataset.snd; if (!k) return; saveState(); sndCancel('demo'); if (k === 'sndRate') { say('Další: Boční plank P'); return; } const a = audio(); if (a) sndCh.demo = blip(a.currentTime, sndBase(), SET().sndChgVoice, 1.5); });
 }
 /* Ukázka: odpočet + tón dané události, nebo jen zvolený zvuk / tón */
 function sndDemo(sec, what, v) {
@@ -1749,6 +1770,8 @@ A.sndSet = el => {
   else if (/Tone$/.test(k)) sndDemo(sec, 'tone', v);
   else if (k !== 'sndPrep') sndDemo(sec);
 };
+A.sndVoicePick = el => { SET().sndVoiceName = el.dataset.v; saveState(); topSheet().refresh(); say('Další: Boční plank P'); };
+A.sndSayTest = () => { if (!SET().sound) { toast('Zvuky jsou vypnuté'); return; } if (!('speechSynthesis' in window)) { toast('Tento prohlížeč neumí předčítat'); return; } say('Připrav se. Začínáme: Plank'); };
 A.sndReset = () => { for (const k of SND_KEYS) SET()[k] = DEFAULT_SETTINGS[k]; saveState(); topSheet().refresh(); toast('Zvuky vráceny na výchozí'); };
 A.setTg = el => { const k = el.dataset.k; SET()[k] = !SET()[k]; saveState(); topSheet().refresh(); rerender(); };
 A.setSeg = el => { const k = el.dataset.k; let v = el.dataset.v; if (!isNaN(+v)) v = +v; SET()[k] = v; if (k === 'unit') SET().inc = v === 'lb' ? 5 : 2.5; saveState(); applyTheme(); topSheet().refresh(); rerender(); };
