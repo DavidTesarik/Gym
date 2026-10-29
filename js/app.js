@@ -39,7 +39,13 @@ const ICON = {
 };
 
 /* ===================== Data a úložiště ===================== */
-const DEFAULT_SETTINGS = { unit:'kg', inc:2.5, rest:120, autoRest:true, vib:true, sound:true, weekGoal:4, theme:'system', weekStart:1, bar:20, rpe:false, asym:15, deload:4, voice:true };
+const DEFAULT_SETTINGS = { unit:'kg', inc:2.5, rest:120, autoRest:true, vib:true, sound:true, weekGoal:4, theme:'system', weekStart:1, bar:20, rpe:false, asym:15, deload:4, voice:true,
+  // zvuky a odpočty (časovač, výdrž, pauza)
+  sndVol:80, sndPitch:0, sndPrep:3, sndIvPrep:10,
+  sndStart:'beeps', sndStartLen:3, sndStartVoice:'beep', sndStartTone:'double',
+  sndChg:'accel', sndChgLen:3, sndChgVoice:'knock', sndChgTone:'double', sndEndTone:'fanfare', sndEndVoice:'beep',
+  sndHold:'none', sndHoldLen:3, sndHoldVoice:'beep', sndHoldTone:'triple',
+  sndRest:'none', sndRestLen:3, sndRestVoice:'beep', sndRestTone:'triple' };
 const LS_KEY = 'svih.v1';
 let DB = {
   state: { _u:0, settings:{...DEFAULT_SETTINGS}, programs:[], activeProgramId:null, custom:[], tests:[], bw:[], meta:{ onboarded:false, lastBackup:0 } },
@@ -322,12 +328,6 @@ function toast(msg, undo, cls = '', label = 'Zpět') {
 
 /* Zvuk a vibrace */
 let actx = null;
-function beep(short) {
-  if (!SET().sound) return;
-  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); const t = actx.currentTime;
-    (short ? [0] : [0, .22, .44]).forEach((d, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = i === 2 ? 1175 : 880; g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(.25, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + .18); o.connect(g).connect(actx.destination); o.start(t + d); o.stop(t + d + .2); });
-  } catch {}
-}
 const vib = p => { if (SET().vib) try { navigator.vibrate && navigator.vibrate(p); } catch {} };
 
 /* Wake lock během tréninku */
@@ -705,8 +705,9 @@ function startHold(i, si) {
   const it = DB.active.w.ex[i]; const s = it.sets[si];
   if (DB.active.hold) { toast('Nejdřív dokonči běžící stopky'); openHoldSheet(); return; }
   const target = +s.sec || it.lo || 30;
-  DB.active.hold = { i, si, target, prep: Date.now() + 3000, beeped: 0, pips: 1 };
-  scheduleCountdown(3);
+  const prep = +SET().sndPrep || 3;
+  DB.active.hold = { i, si, target, prep: Date.now() + prep * 1000, beeped: 0, pips: 1 };
+  signal('hold', 'start', prep);
   DB.active.restEnd = 0; saveActive(); rerender(); openHoldSheet();
 }
 A.hold = el => startHold(+el.dataset.i, +el.dataset.s);
@@ -729,8 +730,10 @@ function tickHold() {
   const h = DB.active.hold; const st = holdState();
   document.querySelectorAll('[data-holdtxt]').forEach(e => e.textContent = holdShort());
   if (!h || !st) return;
-  if (st.phase !== 'prep' && !h.beeped) { h.beeped = 1; vib(60); if (!h.pips) beep(1); }
-  if (st.phase === 'over' && h.beeped < 2) { h.beeped = 2; vib([200, 100, 200]); beep(); saveActive(); }
+  if (st.phase !== 'prep' && !h.beeped) { h.beeped = 1; vib(60); if (!h.pips) signalNow('hold', 'start'); }
+  // odpočet před splněním cíle (podle nastavení zvuků) a tón při splnění
+  if (st.phase === 'run' && !h.tgt) { const left = h.target - st.el; if (left <= sndLead('hold')) { h.tgt = 1; signal('hold', 'hold', left); saveActive(); } }
+  if (st.phase === 'over' && h.beeped < 2) { h.beeped = 2; vib([200, 100, 200]); if (!h.tgt) signalNow('hold', 'hold'); saveActive(); }
   if (!holdSheet) return; const r = holdSheet.sh;
   const lbl = r.querySelector('[data-hl]'), big = r.querySelector('[data-hb]'), bar = r.querySelector('[data-hp]'), note = r.querySelector('[data-hn]'), btn = r.querySelector('[data-hbtn]');
   if (!big) return;
@@ -740,10 +743,10 @@ function tickHold() {
   else { lbl.textContent = 'Cíl splněn – drž dál, nebo zastav'; big.textContent = '+' + st.over + ' s'; bar.style.width = '100%';
     note.textContent = st.el - h.target <= HOLD_GRACE ? `Když zastavíš teď, zapíše se ${h.target} s.` : `Zapíše se celkový čas ${Math.floor(st.el)} s.`; btn.textContent = 'Stop a zapsat'; btn.dataset.a = 'holdStop'; }
 }
-A.holdNow = () => { const h = DB.active.hold; if (!h) return; cancelKnocks(); h.pips = 0; h.prep = Date.now(); saveActive(); tickHold(); };
-A.holdCancel = () => { cancelKnocks(); DB.active.hold = null; saveActive(); if (holdSheet) closeSheet(holdSheet); else rerender(); };
+A.holdNow = () => { const h = DB.active.hold; if (!h) return; sndCancel('hold'); h.pips = 0; h.prep = Date.now(); saveActive(); tickHold(); };
+A.holdCancel = () => { sndCancel('hold'); DB.active.hold = null; saveActive(); if (holdSheet) closeSheet(holdSheet); else rerender(); };
 A.holdStop = () => {
-  const h = DB.active.hold; const st = holdState(); if (!h || !st) return;
+  const h = DB.active.hold; const st = holdState(); if (!h || !st) return; sndCancel('hold');
   if (st.phase === 'prep') return A.holdCancel();
   const el = st.el; const it = DB.active.w.ex[h.i]; const s = it && it.sets[h.si];
   if (!s) return A.holdCancel();
@@ -755,10 +758,10 @@ A.holdStop = () => {
 };
 
 /* ===================== Pauza ===================== */
-let restFired = false;
+let restFired = false, restSched = 0;
 function startRest(secs) { DB.active.restEnd = Date.now() + secs * 1000; DB.active.restTotal = secs; restFired = false; saveActive(); renderRestBar(); }
 A.restAdj = el => { DB.active.restEnd += +el.dataset.v * 1000; DB.active.restTotal += +el.dataset.v; if (DB.active.restEnd > Date.now()) restFired = false; saveActive(); renderRestBar(); };
-A.restSkip = () => { DB.active.restEnd = 0; saveActive(); renderRestBar(); };
+A.restSkip = () => { sndCancel('rest'); restSched = 0; DB.active.restEnd = 0; saveActive(); renderRestBar(); };
 function renderRestBar() {
   let bar = $('#restbar');
   const show = DB.active.w && TAB === 'train' && DB.active.restEnd && Date.now() < DB.active.restEnd + 4000;
@@ -781,9 +784,13 @@ setInterval(() => {
   document.querySelectorAll('[data-elapsed]').forEach(e => e.textContent = fmtDur((Date.now() - DB.active.w.start) / 1000));
   if (DB.active.hold) tickHold();
   if (DB.active.tm) tickTimer();
+  if (!DB.active.restEnd && restSched) { sndCancel('rest'); restSched = 0; }
   if (DB.active.restEnd) {
     const left = DB.active.restEnd - Date.now();
-    if (left <= 0 && !restFired) { restFired = true; vib([200, 100, 200]); beep(); }
+    // odpočet před koncem pauzy podle nastavení; při změně délky pauzy se přeplánuje
+    if (restSched && restSched !== DB.active.restEnd) { sndCancel('rest'); restSched = 0; }
+    if (left > 0 && !restSched && left / 1000 <= sndLead('rest')) { restSched = DB.active.restEnd; signal('rest', 'rest', left / 1000); }
+    if (left <= 0 && !restFired) { restFired = true; vib([200, 100, 200]); if (restSched !== DB.active.restEnd) signalNow('rest', 'rest'); }
     if (left < -4000) { DB.active.restEnd = 0; }
     renderRestBar();
   }
@@ -991,7 +998,7 @@ function openCustomEditor(id) {
     <div class="field"><span class="lbl">Zaměření</span><div class="mini">${Object.entries(FOCUS).map(([k, v]) => `<button class="chip" data-a="cuF" data-v="${k}" aria-pressed="${d.f.includes(k)}">${v}</button>`).join('')}</div></div>
     <div class="field"><label for="ct">Co zapisovat</label><select class="input" id="ct">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${d.t === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
     ${d.t === 'complex' ? `<div class="card stack" style="gap:8px"><h3 class="h3">Fáze jednoho opakování</h3>
-      <p class="tiny faint" style="margin:0">Po spuštění odpočítá 3 s pípáním, pak jdou fáze za sebou bez pauzy. 3 s před každou změnou začne ťukání, které se zrychluje až do přepnutí na další fázi (bez hlasu).</p>
+      <p class="tiny faint" style="margin:0">Po spuštění odpočítá přípravu, pak jdou fáze za sebou bez pauzy. Před každou změnou zazní odpočet (bez hlasu) – styl a zvuky si nastavíš v Nastavení → Zvuky a odpočty.</p>
       ${(d.ph || []).map((p, k) => `<div class="row" style="gap:6px"><span class="num faint" style="width:18px">${k + 1}.</span><input class="input grow" data-ph="${k}" data-pk="n" value="${esc(p.n)}" aria-label="Název fáze ${k + 1}" placeholder="Např. Plank"><input class="input num" style="width:76px;text-align:center" inputmode="numeric" data-ph="${k}" data-pk="s" value="${p.s}" aria-label="Délka fáze ${k + 1} v sekundách"><span class="small muted">s</span><button class="iconbtn" data-a="cuPhDel" data-k="${k}" aria-label="Odebrat fázi" style="color:var(--warn)">${ICON.trash}</button></div>`).join('')}
       <button class="btn sm" data-a="cuPhAdd">${ICON.plus} Přidat fázi</button>
       <div class="small muted">Jedno opakování trvá ${fmtDur((d.ph || []).reduce((a, p) => a + (+p.s || 0), 0))}.</div></div>` : ''}
@@ -1129,7 +1136,7 @@ function modeCfgForm(d) {
     <div class="row wrap" style="gap:10px">${f('work', 'Cvičení', 's')}${f('rest', 'Pauza mezi cviky', 's')}</div>
     <div class="row wrap" style="gap:10px">${f('rounds', 'Počet kol', '')}${f('rrest', 'Pauza mezi koly', 's')}</div>
     <div class="small ${n && (n < 6 || n > 12) ? '' : 'muted'}" ${n && (n < 6 || n > 12) ? 'style="color:var(--warn)"' : ''}>${n} ${plural(n, 'cvik', 'cviky', 'cviků')} v kole${n && (n < 6 || n > 12) ? ' · doporučeno 6–12' : ''} · celkem ${fmtMin(intervalTotal(c, n))}</div>
-    <p class="tiny faint" style="margin:0">Cviky jdou za sebou v pořadí seznamu. 3 s před každou změnou začne zrychlující se ťukání${SET().voice ? ' a hlas řekne, co následuje' : ''}.</p></div>`;
+    <p class="tiny faint" style="margin:0">Cviky jdou za sebou v pořadí seznamu. Před každou změnou zazní odpočet${SET().voice ? ' a hlas řekne, co následuje' : ''} (nastavíš v Nastavení → Zvuky a odpočty).</p></div>`;
   const seq = ladderSeq(c);
   return `<div class="card stack" style="gap:10px"><h3 class="h3">Nastavení žebříku</h3>
     <div class="row wrap" style="gap:10px">${f('from', 'Začít na', 'opak.')}${f('top', 'Vrchol', 'opak.')}</div>
@@ -1141,40 +1148,83 @@ A.dMode = el => { const { d } = dayCtx(); d.mode = el.dataset.v; if (d.mode !== 
 A.dPyr = () => { const { d } = dayCtx(); d.cfg = modeCfg('ladder', d.cfg); d.cfg.pyr = d.cfg.pyr ? 0 : 1; saveState(); topSheet().refresh(); };
 
 /* ---------- Zvuk a hlas ---------- */
+/* Vše se plánuje přes Web Audio na přesný čas. Kanály: tm (časovač), hold (výdrž), rest (pauza), demo (ukázka v nastavení). */
+let sndMaster = null, sndNoise = null;
 function audio() { if (!SET().sound) return null; try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); return actx; } catch { return null; } }
-function tone(freq, dur, vol = .28, at) {
-  const a = audio(); if (!a) return null;
-  try { const t = at || a.currentTime, o = a.createOscillator(), g = a.createGain(); o.frequency.value = freq;
-    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .015); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + .02); return o; } catch { return null; }
+function sndOut(a) {
+  if (!sndMaster || sndMaster.context !== a) { sndMaster = a.createGain(); sndMaster.connect(a.destination); }
+  sndMaster.gain.value = Math.max(.0001, (SET().sndVol ?? 80) / 100 * 1.25); return sndMaster;
 }
-/* Ťuknutí (krátký „dřívkový“ klik) naplánované na přesný čas */
-function knock(at, freq = 1500, vol = .32) {
-  const a = audio(); if (!a) return null;
-  try { const o = a.createOscillator(), g = a.createGain(); o.type = 'triangle';
-    o.frequency.setValueAtTime(freq, at); o.frequency.exponentialRampToValueAtTime(freq * .62, at + .045);
-    g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(vol, at + .004); g.gain.exponentialRampToValueAtTime(.0001, at + .06);
-    o.connect(g).connect(a.destination); o.start(at); o.stop(at + .08); return o; } catch { return null; }
+const sndBase = () => 880 * Math.pow(2, (+SET().sndPitch || 0) / 12);
+const SND_VOICES = [['beep', 'Pípnutí'], ['knock', 'Ťuknutí'], ['click', 'Klik'], ['bell', 'Zvonek'], ['digital', 'Digitální'], ['soft', 'Měkké'], ['drop', 'Kapka']];
+const SND_STYLES = [['beeps', 'Pípání 3-2-1'], ['accel', 'Zrychlující'], ['single', 'Jedno pípnutí'], ['none', 'Žádný']];
+const SND_TONES = [['double', 'Dvojtón'], ['short', 'Krátký'], ['long', 'Dlouhý'], ['triple', 'Trojité'], ['fanfare', 'Fanfára'], ['gong', 'Gong'], ['none', 'Žádný']];
+/* Jedno pípnutí zvoleným zvukem v čase `at` (len = délka pro tóny, které jdou prodloužit) */
+function blip(at, f, voice = 'beep', len = 1) {
+  const a = audio(); if (!a) return []; const m = sndOut(a); const nodes = [];
+  try {
+    const env = (g, peak, att, dec) => { g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + att); g.gain.exponentialRampToValueAtTime(.0001, at + att + dec); };
+    const osc = (type, freq, peak, att, dec, f2) => { const o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(freq, at); if (f2) o.frequency.exponentialRampToValueAtTime(f2, at + Math.min(dec, .09)); env(g, peak, att, dec); o.connect(g).connect(m); o.start(at); o.stop(at + att + dec + .03); nodes.push(o); };
+    switch (voice) {
+      case 'knock': osc('triangle', f * 1.55, .5, .004, .06, f); break;
+      case 'click': { if (!sndNoise || sndNoise.sampleRate !== a.sampleRate) { sndNoise = a.createBuffer(1, a.sampleRate * .06 | 0, a.sampleRate); const d = sndNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3); }
+        const src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain(); src.buffer = sndNoise; bp.type = 'bandpass'; bp.frequency.value = f * 2.4; bp.Q.value = 2.5; g.gain.value = 1.6;
+        src.connect(bp).connect(g).connect(m); src.start(at); src.stop(at + .07); nodes.push(src); break; }
+      case 'bell': osc('sine', f, .3, .004, .45 * len + .35); osc('sine', f * 2.76, .1, .003, .22 * len + .1); osc('sine', f * 5.4, .04, .002, .1); break;
+      case 'digital': osc('square', f * 2, .08, .002, .07 * len); break;
+      case 'soft': osc('sine', f * .66, .34, .035, .2 * len + .05); break;
+      case 'drop': osc('sine', f * .75, .38, .004, .12 * Math.min(len, 2), f * 1.9); break;
+      default: osc('sine', f, .3, .012, .12 * len);
+    }
+  } catch {}
+  return nodes;
 }
-/* Zrychlující se ťukání posledních 3 s před změnou + signál změny (další fáze) nebo konce */
-const KNOCKS = [3, 2.5, 2.05, 1.66, 1.32, 1.03, .79, .59, .42, .28, .16, .06];
-let knockNodes = [];
-function cancelKnocks() { knockNodes.forEach(o => { try { o && o.stop(); } catch {} }); knockNodes = []; }
-function scheduleKnocks(left, end) {
-  const a = audio(); if (!a) return;
-  cancelKnocks(); const t0 = a.currentTime;
-  KNOCKS.filter(o => o < left - .02).forEach((o, i, arr) => knockNodes.push(knock(t0 + left - o, 1250 + (3 - o) * 170)));
-  const at = t0 + left;
-  if (end) [[880, 0], [1175, .16], [1568, .32]].forEach(([f, d]) => knockNodes.push(tone(f, d === .32 ? .6 : .2, .3, at + d)));
-  else knockNodes.push(tone(1320, .32, .3, at), tone(1760, .25, .2, at + .1));
+/* Výrazný tón ve chvíli startu / změny / konce */
+function accent(kind, at, voice) {
+  const b = sndBase(), n = []; const perc = voice === 'knock' || voice === 'click';
+  const P = (t, f, len) => n.push(...blip(at + t, f, voice, len));
+  switch (kind) {
+    case 'short': P(0, b * 1.5, 1.4); break;
+    case 'double': P(0, b * 1.5, 2.6); P(.11, b * 2, 2); break;
+    case 'long': if (perc) [0, .07, .14, .21, .28].forEach(t => P(t, b * 1.5, 1)); else P(0, b * 1.5, 5); break;
+    case 'triple': P(0, b, 1.4); P(.22, b, 1.4); P(.44, b * 1.335, 1.6); break;
+    case 'fanfare': P(0, b, 1.6); P(.16, b * 1.335, 1.6); P(.32, b * 1.78, 4.5); break;
+    case 'gong': n.push(...blip(at, b * .5, 'bell', 4)); break;
+  }
+  return n;
 }
-/* Odpočet před startem: pípnutí 3, 2, 1 a delší vyšší tón ve chvíli startu */
-function scheduleCountdown(left) {
-  const a = audio(); if (!a) return;
-  cancelKnocks(); const t0 = a.currentTime;
-  [3, 2, 1].filter(k => k <= left + .05).forEach(k => knockNodes.push(tone(880, .13, .3, t0 + Math.max(0, left - k))));
-  knockNodes.push(tone(1320, .45, .32, t0 + left));
+/* Odpočet k události za `left` s: 3-2-1, zrychlující ťukání, nebo jedno pípnutí */
+function countdown(style, len, left, voice) {
+  const a = audio(); if (!a) return []; const ev = a.currentTime + left, b = sndBase(), n = [];
+  if (style === 'beeps') { for (let k = len; k >= 1; k--) if (k <= left + .05) n.push(...blip(ev - k, b, voice, 1)); }
+  else if (style === 'single') { if (len <= left + .05) n.push(...blip(ev - len, b * 1.2, voice, 1.6)); }
+  else if (style === 'accel') { const r = .84; let d = len * (1 - r), o = len; while (o > .07) { if (o <= left + .02) n.push(...blip(ev - o, b * (1.25 + .45 * (1 - o / len)), voice, .9)); o -= d; d = Math.max(.075, d * r); } }
+  return n;
 }
+/* Nastavení jednotlivých událostí */
+function sndCfg(kind) {
+  const s = SET();
+  return {
+    start: { st: s.sndStart, len: s.sndStartLen, v: s.sndStartVoice, tone: s.sndStartTone, tv: s.sndStartVoice },
+    chg: { st: s.sndChg, len: s.sndChgLen, v: s.sndChgVoice, tone: s.sndChgTone, tv: s.sndChgVoice },
+    end: { st: s.sndChg, len: s.sndChgLen, v: s.sndChgVoice, tone: s.sndEndTone, tv: s.sndEndVoice },
+    hold: { st: s.sndHold, len: s.sndHoldLen, v: s.sndHoldVoice, tone: s.sndHoldTone, tv: s.sndHoldVoice },
+    rest: { st: s.sndRest, len: s.sndRestLen, v: s.sndRestVoice, tone: s.sndRestTone, tv: s.sndRestVoice }
+  }[kind];
+}
+const sndLead = kind => { const c = sndCfg(kind); return (c.st === 'none' ? 0 : +c.len || 3) + .4; };
+const sndCh = {};
+function sndCancel(ch) { (sndCh[ch] || []).forEach(o => { try { o.stop(); } catch {} }); sndCh[ch] = []; }
+/* Naplánuje odpočet + tón pro událost za `left` sekund */
+function signal(ch, kind, left) {
+  sndCancel(ch); const a = audio(); if (!a) return; const c = sndCfg(kind);
+  const n = c.st === 'none' ? [] : countdown(c.st, +c.len || 3, left, c.v);
+  n.push(...accent(c.tone, a.currentTime + Math.max(0, left), c.tv)); sndCh[ch] = n;
+}
+function signalNow(ch, kind) { signal(ch, kind, 0); }
+/* zpětná kompatibilita */
+function tone(freq, dur, vol = .28, at) { const a = audio(); if (!a) return null; return blip(at || a.currentTime, freq, 'beep', dur / .12)[0] || null; }
+function cancelKnocks() { sndCancel('tm'); }
 function say(text) {
   if (!text || !SET().voice || !('speechSynthesis' in window)) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'cs-CZ'; u.rate = 1.05;
@@ -1191,11 +1241,11 @@ function startTimer(tm) {
   if (DB.active.hold) { toast('Nejdřív dokonči běžící stopky'); return; }
   tm.start = Date.now(); tm.pauseAcc = 0; tm.pausedAt = 0; tm.fired = {};
   DB.active.tm = tm; DB.active.restEnd = 0; saveActive();
-  tone(660, .08, .01); if (tm.type !== 'complex' && tm.segs[0].kind === 'prep') say('Připrav se. Začínáme: ' + nextLabel(tm, 0));
+  audio(); if (tm.type !== 'complex' && tm.segs[0].kind === 'prep') say('Připrav se. Začínáme: ' + nextLabel(tm, 0));
   rerender(); openTimerSheet();
 }
 function complexSegs(ex, reps) {
-  const segs = [{ kind:'prep', dur:3, label:'Připrav se' }]; const ph = ex.ph || [];
+  const segs = [{ kind:'prep', dur: +SET().sndPrep || 3, label:'Připrav se' }]; const ph = ex.ph || [];
   for (let r = 1; r <= reps; r++) ph.forEach((p, k) => segs.push({ kind:'work', dur: p.s, label: p.n, r, of: reps, pi: k + 1, pn: ph.length }));
   return segs;
 }
@@ -1211,7 +1261,7 @@ function intervalSegs(w) {
   for (let r = 0; r < c.rounds; r++) for (let k = 0; k < n; k++) {
     const s = w.ex[k].sets[r]; if (!s) continue;
     if (!started && s.done) continue;
-    if (!started) { started = true; segs.push({ kind:'prep', dur:10, label:'Připrav se' }); }
+    if (!started) { started = true; segs.push({ kind:'prep', dur: +SET().sndIvPrep || 10, label:'Připrav se' }); }
     segs.push({ kind:'work', dur: c.work, label: exById(w.ex[k].ex).n, ex: k, r, k, n, rounds: c.rounds });
     const lastInRound = k === n - 1, lastAll = lastInRound && r === c.rounds - 1;
     if (!lastAll) { if (lastInRound) { if (c.rrest) segs.push({ kind:'rrest', dur: c.rrest, label:'Pauza mezi koly', r, rounds: c.rounds }); }
@@ -1254,14 +1304,14 @@ function tickTimer() {
     // vstup do nového úseku: vibrace; zvuk jen pokud nebyl naplánovaný (např. po přeskočení)
     if (loc.idx > 0 && el - loc.startAt < 1 && !f[loc.idx + 'e']) {
       f[loc.idx + 'e'] = 1; vib(loc.seg.kind === 'work' ? [80, 60, 80] : 120);
-      if (!f[loc.idx + 's']) { f[loc.idx + 's'] = 1; tone(loc.seg.kind === 'work' ? 1320 : 520, .38); }
+      if (!f[loc.idx + 's']) { f[loc.idx + 's'] = 1; if (loc.seg.kind === 'work') signalNow('tm', 'chg'); else blip(audio() ? actx.currentTime : 0, sndBase() * .6, SET().sndChgVoice, 2); }
       if (tm.type !== 'complex' && loc.seg.kind !== 'work' && !f[loc.idx + 'v']) { f[loc.idx + 'v'] = 1; say('Pauza. Další: ' + nextLabel(tm, loc.idx)); }
     }
-    // poslední 3 s úseku: před startem pípání 3-2-1, jinak zrychlující se ťukání; na konci signál změny / konce (bez hlasu)
-    if (loc.left <= 3.4 && loc.seg.dur > 1.5 && !f[loc.idx + 't']) {
-      const last = loc.idx === tm.segs.length - 1;
+    // před koncem úseku odpočet podle nastavení zvuků (start / změna / konec), bez hlasu
+    const last = loc.idx === tm.segs.length - 1, kind = loc.seg.kind === 'prep' ? 'start' : last ? 'end' : 'chg';
+    if (loc.left <= sndLead(kind) && loc.seg.dur > 1.5 && !f[loc.idx + 't']) {
       f[loc.idx + 't'] = 1; f[(loc.idx + 1) + 's'] = 1; if (last) f.end = 1;
-      if (loc.seg.kind === 'prep') scheduleCountdown(loc.left); else scheduleKnocks(loc.left, last);
+      signal('tm', kind, loc.left);
       if (tm.type !== 'complex' && loc.seg.kind === 'work') { const nx = nextLabel(tm, loc.idx); if (nx) say('Další: ' + nx); }
     }
   }
@@ -1291,7 +1341,7 @@ function stopTimer(silent) { if (!DB.active.tm) return; DB.active.tm = null; if 
 function finishTimer(early) {
   const tm = DB.active.tm; if (!tm) return; const el = tmEl(tm);
   try { speechSynthesis.cancel(); } catch {}
-  if (!early) { if (!tm.fired.end) scheduleKnocks(0, true); vib([200, 100, 200, 100, 300]); }
+  if (!early) { if (!tm.fired.end) signalNow('tm', 'end'); vib([200, 100, 200, 100, 300]); }
   if (tm.type === 'complex') {
     let acc = 0, reps = 0; for (const sg of tm.segs) { acc += sg.dur; if (acc <= el + .01 && sg.kind === 'work' && sg.pi === sg.pn) reps = sg.r; }
     stopTimer(true);
@@ -1591,10 +1641,8 @@ function openSettings() {
         ${sg('inc', 'Krok váhy (± a automatická progrese)', [[1, '1'], [1.25, '1,25'], [2.5, '2,5'], [5, '5']])}
         ${sg('rest', 'Výchozí pauza (cviky mají i vlastní)', [[60, '1:00'], [90, '1:30'], [120, '2:00'], [180, '3:00']])}
         ${tg('autoRest', 'Spustit pauzu po odškrtnutí série')}
-        ${tg('vib', 'Vibrace na konci pauzy', 'Funguje jen na telefonech, které to podporují')}
-        ${tg('sound', 'Zvuk na konci pauzy')}
+        <button class="li" data-a="soundSettings"><div class="grow"><div style="font-weight:600">Zvuky a odpočty</div><div class="tiny faint">${esc(sndSummary())}</div></div><span class="faint" aria-hidden="true">›</span></button>
         ${tg('rpe', 'Zapisovat náročnost (RPE)', 'Nastavíš ji klepnutím na číslo série')}
-        ${tg('voice', 'Hlásit další cvik hlasem', 'Jen intervaly: 3 s před změnou řekne, co následuje. Změny vždy ohlásí zrychlující se ťukání.')}
         ${sg('weekGoal', 'Týdenní cíl tréninků', [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']])}
         ${sg('bar', 'Váha osy (kalkulačka kotoučů)', [[20, '20 kg'], [15, '15 kg'], [10, '10 kg']])}
       </div>
@@ -1613,10 +1661,95 @@ function openSettings() {
         <label class="li" style="cursor:pointer"><div class="grow" style="font-weight:600">Obnovit ze zálohy</div><input type="file" accept="application/json,.json" id="impf" class="sr" aria-label="Soubor zálohy"></label>
         <button class="li" data-a="wipe" style="color:var(--warn);font-weight:600">Smazat všechna data</button>
       </div>
-      <p class="tiny faint" style="margin:0">Animace cviků jsou schematické, pro přesnou techniku použij odkaz na video. Rekordy počítá appka z odhadu maxima na 1 opakování, u výbušných a golfových cviků z rychlosti nebo vzdálenosti.</p></div>`;
+      <p class="tiny faint" style="margin:0">Ukázky cviků jsou kreslené kroky, pro přesnou techniku použij odkaz na video. Rekordy počítá appka z odhadu maxima na 1 opakování, u výbušných a golfových cviků z rychlosti nebo vzdálenosti.</p></div>`;
   }, { full: true });
   o.sh.addEventListener('change', e => { if (e.target.id === 'impf' && e.target.files[0]) importFile(e.target.files[0]); });
 }
+/* ---------- Zvuky a odpočty ---------- */
+const SND_KEYS = ['sndVol', 'sndPitch', 'sndPrep', 'sndIvPrep', 'sndStart', 'sndStartLen', 'sndStartVoice', 'sndStartTone', 'sndChg', 'sndChgLen', 'sndChgVoice', 'sndChgTone', 'sndEndTone', 'sndEndVoice', 'sndHold', 'sndHoldLen', 'sndHoldVoice', 'sndHoldTone', 'sndRest', 'sndRestLen', 'sndRestVoice', 'sndRestTone'];
+const sndName = (list, v) => (list.find(x => x[0] === v) || ['', v])[1];
+function sndSummary() {
+  const s = SET(); if (!s.sound) return 'Zvuky vypnuté' + (s.vib ? ' · vibrace zapnuté' : '');
+  return `Start: ${sndName(SND_STYLES, s.sndStart).toLowerCase()} · změna: ${sndName(SND_STYLES, s.sndChg).toLowerCase()} · hlasitost ${s.sndVol} %`;
+}
+function sndSection(k) { return /^sndStart|^sndPrep/.test(k) ? 'start' : /^sndChg/.test(k) ? 'chg' : /^sndEnd/.test(k) ? 'end' : /^sndHold/.test(k) ? 'hold' : /^sndRest/.test(k) ? 'rest' : null; }
+A.soundSettings = () => openSoundSettings();
+function openSoundSettings() {
+  const o = openSheet(() => {
+    const s = SET();
+    const seg = (k, opts) => `<div class="seg">${opts.map(([v, t]) => `<button aria-pressed="${s[k] === v}" data-a="sndSet" data-k="${k}" data-v="${v}">${t}</button>`).join('')}</div>`;
+    const chips = (k, opts) => `<div class="optwrap">${opts.map(([v, t]) => `<button class="chip" aria-pressed="${s[k] === v}" data-a="sndSet" data-k="${k}" data-v="${v}">${t}</button>`).join('')}</div>`;
+    const row = (l, inner, d) => `<div class="li" style="flex-direction:column;align-items:stretch;gap:8px"><div><div style="font-weight:600">${l}</div>${d ? `<div class="tiny faint">${d}</div>` : ''}</div>${inner}</div>`;
+    const tg = (k, l, d) => `<div class="li" style="min-height:60px"><div class="grow"><div style="font-weight:600">${l}</div>${d ? `<div class="tiny faint">${d}</div>` : ''}</div><button class="toggle" role="switch" aria-checked="${!!s[k]}" aria-label="${l}" data-a="setTg" data-k="${k}"></button></div>`;
+    const head = (t, k, d) => `<div class="row between" style="align-items:flex-end;gap:10px"><div><span class="eyebrow">${t}</span>${d ? `<div class="tiny faint">${d}</div>` : ''}</div>${k ? `<button class="btn sm" data-a="sndDemo" data-k="${k}">${ICON.play} Ukázka</button>` : ''}</div>`;
+    const lens = l => l.map(v => [v, v + ' s']);
+    const pitchLbl = p => p == 0 ? 'Výchozí' : (p > 0 ? 'Vyšší +' : 'Nižší ') + p;
+    const off = s.sound ? '' : ' style="opacity:.45"';
+    return sheetHead('Zvuky a odpočty', { close: true }) + `<div class="stack">
+      ${head('Obecné')}<div class="list">
+        ${tg('sound', 'Zvuky', 'Na iPhonu zkontroluj, že není zapnutý tichý režim – jinak může být pípání ztlumené.')}
+        <div class="li" style="flex-direction:column;align-items:stretch;gap:6px"${off}><div class="row between"><span style="font-weight:600">Hlasitost</span><span class="small muted num" data-sndl="sndVol">${s.sndVol} %</span></div><input type="range" class="range" min="10" max="100" step="5" value="${s.sndVol}" data-snd="sndVol" aria-label="Hlasitost"></div>
+        <div class="li" style="flex-direction:column;align-items:stretch;gap:6px"${off}><div class="row between"><span style="font-weight:600">Výška tónů</span><span class="small muted" data-sndl="sndPitch">${pitchLbl(s.sndPitch)}</span></div><input type="range" class="range" min="-12" max="12" step="1" value="${s.sndPitch}" data-snd="sndPitch" aria-label="Výška tónů"></div>
+        ${tg('vib', 'Vibrace', 'Na konci pauzy, při změně fáze a na konci cviku. Jen na telefonech, které to podporují (iPhone ne).')}
+        ${tg('voice', 'Hlásit další cvik hlasem', 'Jen u intervalů a tabaty. Komplexní cviky (např. plankový okruh) nikdy nemluví.')}
+      </div>
+      <div class="stack" style="gap:10px"${off}>
+      ${head('Po spuštění cviku', 'start', 'Komplexní cviky, intervaly i výdrž na čas')}<div class="list">
+        ${row('Příprava před startem', seg('sndPrep', lens([3, 5, 10])), 'Komplexní cviky a výdrž na čas')}
+        ${row('Příprava u intervalů a tabaty', seg('sndIvPrep', lens([5, 10, 15, 20])))}
+        ${row('Odpočet', seg('sndStart', SND_STYLES))}
+        ${row('Délka odpočtu', seg('sndStartLen', lens([3, 5])))}
+        ${row('Zvuk odpočtu', chips('sndStartVoice', SND_VOICES))}
+        ${row('Tón ve chvíli startu', chips('sndStartTone', SND_TONES))}
+      </div>
+      ${head('Před změnou fáze nebo cviku', 'chg', 'Komplexní cviky (strana planku…), intervaly a pauzy mezi nimi')}<div class="list">
+        ${row('Odpočet', seg('sndChg', SND_STYLES))}
+        ${row('Délka odpočtu', seg('sndChgLen', lens([3, 5])))}
+        ${row('Zvuk odpočtu', chips('sndChgVoice', SND_VOICES))}
+        ${row('Tón při změně', chips('sndChgTone', SND_TONES))}
+      </div>
+      ${head('Konec cviku', 'end', 'Odpočet před koncem je stejný jako před změnou fáze')}<div class="list">
+        ${row('Tón na konci', chips('sndEndTone', SND_TONES))}
+        ${row('Zvuk tónu', chips('sndEndVoice', SND_VOICES))}
+      </div>
+      ${head('Výdrž na čas', 'hold', 'Stopky u cviků jako plank – splnění cílového času')}<div class="list">
+        ${row('Odpočet před splněním cíle', seg('sndHold', SND_STYLES))}
+        ${row('Délka odpočtu', seg('sndHoldLen', lens([3, 5])))}
+        ${row('Zvuk odpočtu', chips('sndHoldVoice', SND_VOICES))}
+        ${row('Tón při splnění cíle', chips('sndHoldTone', SND_TONES))}
+      </div>
+      ${head('Konec pauzy mezi sériemi', 'rest')}<div class="list">
+        ${row('Odpočet před koncem pauzy', seg('sndRest', SND_STYLES))}
+        ${row('Délka odpočtu', seg('sndRestLen', lens([3, 5, 10])))}
+        ${row('Zvuk odpočtu', chips('sndRestVoice', SND_VOICES))}
+        ${row('Tón na konci pauzy', chips('sndRestTone', SND_TONES))}
+      </div>
+      </div>
+      <button class="btn block" data-a="sndReset">Obnovit výchozí zvuky</button></div>`;
+  }, { full: true, onClose: () => { sndCancel('demo'); topSheet() && topSheet().refresh(); } });
+  o.sh.addEventListener('input', e => {
+    const k = e.target.dataset.snd; if (!k) return; SET()[k] = +e.target.value;
+    const l = o.sh.querySelector(`[data-sndl="${k}"]`); if (l) l.textContent = k === 'sndVol' ? e.target.value + ' %' : (+e.target.value === 0 ? 'Výchozí' : (+e.target.value > 0 ? 'Vyšší +' : 'Nižší ') + e.target.value);
+  });
+  o.sh.addEventListener('change', e => { const k = e.target.dataset.snd; if (!k) return; saveState(); sndCancel('demo'); const a = audio(); if (a) sndCh.demo = blip(a.currentTime, sndBase(), SET().sndChgVoice, 1.5); });
+}
+/* Ukázka: odpočet + tón dané události, nebo jen zvolený zvuk / tón */
+function sndDemo(sec, what, v) {
+  sndCancel('demo'); const a = audio(); if (!a) { toast(SET().sound ? 'Zvuk se nepodařilo spustit' : 'Zvuky jsou vypnuté'); return; }
+  const c = sndCfg(sec);
+  if (what === 'voice') { sndCh.demo = blip(a.currentTime + .02, sndBase(), v, 1.5); return; }
+  if (what === 'tone') { sndCh.demo = accent(v, a.currentTime + .02, c.tv); return; }
+  signal('demo', sec, c.st === 'none' ? .2 : +c.len + .15);
+}
+A.sndDemo = el => sndDemo(el.dataset.k);
+A.sndSet = el => {
+  const k = el.dataset.k; let v = el.dataset.v; if (!isNaN(+v)) v = +v; SET()[k] = v; saveState(); topSheet().refresh();
+  const sec = sndSection(k); if (!sec || !SET().sound) return;
+  if (/Voice$/.test(k)) sndDemo(sec, /End/.test(k) ? 'tone' : 'voice', /End/.test(k) ? SET().sndEndTone : v);
+  else if (/Tone$/.test(k)) sndDemo(sec, 'tone', v);
+  else if (k !== 'sndPrep') sndDemo(sec);
+};
+A.sndReset = () => { for (const k of SND_KEYS) SET()[k] = DEFAULT_SETTINGS[k]; saveState(); topSheet().refresh(); toast('Zvuky vráceny na výchozí'); };
 A.setTg = el => { const k = el.dataset.k; SET()[k] = !SET()[k]; saveState(); topSheet().refresh(); rerender(); };
 A.setSeg = el => { const k = el.dataset.k; let v = el.dataset.v; if (!isNaN(+v)) v = +v; SET()[k] = v; if (k === 'unit') SET().inc = v === 'lb' ? 5 : 2.5; saveState(); applyTheme(); topSheet().refresh(); rerender(); };
 
