@@ -39,7 +39,7 @@ const ICON = {
 };
 
 /* ===================== Data a úložiště ===================== */
-const DEFAULT_SETTINGS = { unit:'kg', inc:2.5, rest:120, autoRest:true, vib:true, sound:true, weekGoal:4, theme:'system', weekStart:1, bar:20, rpe:false, asym:15, deload:4, voice:true,
+const DEFAULT_SETTINGS = { unit:'kg', prefill:'best', inc:2.5, rest:120, autoRest:true, vib:true, sound:true, weekGoal:4, theme:'system', weekStart:1, bar:20, rpe:false, asym:15, deload:4, voice:true,
   // zvuky a odpočty (časovač, výdrž, pauza)
   sndVol:80, sndPitch:0, sndPrep:3, sndIvPrep:10,
   sndStart:'beeps', sndStartLen:3, sndStartVoice:'beep', sndStartTone:'double',
@@ -189,6 +189,16 @@ function histIndex() {
   _hist = { byEx }; _histStamp = stamp; return _hist;
 }
 const lastSession = exId => (histIndex().byEx[exId] || [])[0] || null;
+/* Trénink s nejlepším výkonem v cviku (nejvyšší skóre série: u vah odhad 1RM, jinak opakování / čas / rychlost…); při shodě ten novější */
+function bestSession(exId) {
+  const h = histIndex(); h.best ||= {}; if (exId in h.best) return h.best[exId];
+  const ex = exById(exId); let best = null, bs = 0;
+  for (const x of h.byEx[exId] || []) { let m = 0; for (const s of x.it.sets) if (s.done && s.k !== 'w') m = Math.max(m, setScore(ex, s)); if (m > bs + 1e-9) { bs = m; best = x; } }
+  return (h.best[exId] = best);
+}
+/* Podle nastavení: z jakého tréninku se předvyplňují a ukazují hodnoty */
+const prefillBest = () => SET().prefill !== 'last';
+const refSession = exId => (prefillBest() && bestSession(exId)) || lastSession(exId);
 function bestScore(exId, exceptWid) {
   const ex = exById(exId); let b = 0;
   for (const { w, it } of histIndex().byEx[exId] || []) { if (w.id === exceptWid) continue; for (const s of it.sets) if (s.done) b = Math.max(b, setScore(ex, s)); }
@@ -405,7 +415,7 @@ function workoutLi(w) {
 
 /* ===================== Start tréninku ===================== */
 function buildSets(exId, item, n) {
-  const ex = exById(exId); const last = lastSession(exId);
+  const ex = exById(exId); const last = refSession(exId);
   const lastWork = last ? last.it.sets.filter(s => s.done && s.k !== 'w') : [];
   const sides = ex.sd ? ['L', 'P'] : [''];
   let up = false;
@@ -479,8 +489,9 @@ function exCard(it, i, w) {
   const prevItem = i > 0 ? w.ex[i - 1] : null;
   const inSS = it.ss || (prevItem && prevItem.ss);
   const ssLabel = inSS ? ssName(w, i) : '';
-  const last = lastSession(it.ex);
+  const last = refSession(it.ex);
   const lastWork = last ? last.it.sets.filter(s => s.done && s.k !== 'w') : [];
+  const refLbl = prefillBest() ? 'Nejlepší' : 'Minule';
   const sideIdx = { L:0, P:0, '':0 };
   const rows = it.sets.map((s, si) => {
     const side = s.side || ''; const n = s.k === 'w' ? null : (++sideIdx[side]);
@@ -501,8 +512,8 @@ function exCard(it, i, w) {
   return `<article class="excard ${inSS ? 'ssA' : ''}">
     <div class="exhead"><button class="exname" data-a="exInfo" data-ex="${ex.id}">${ssLabel ? `<span class="ssmark">${ssLabel} </span>` : ''}${esc(ex.n)}</button>
       <button class="iconbtn" data-a="exMenu" data-i="${i}" aria-label="Možnosti cviku">${ICON.dots}</button></div>
-    ${target || it.note ? `<div class="exnote">${target ? 'Cíl: ' + target : ''}${it.up ? '' : ''}${it.note ? (target ? ' · ' : '') + esc(it.note) : ''}</div>` : ''}
-    <div class="sets ${cols.length === 1 ? 'c1' : ''}"><div class="hd">Série</div><div class="hd l">Minule</div>${cols.map(c => `<div class="hd">${colLabel(ex.t, c)}</div>`).join('')}<div class="hd">Hotovo</div>${rows}</div>
+    ${target || it.note || last ? `<div class="exnote">${[target ? 'Cíl: ' + target : '', last ? refLbl.toLowerCase() + ' ' + fmtDateShort(last.w.start) : '', it.note ? esc(it.note) : ''].filter(Boolean).join(' · ')}</div>` : ''}
+    <div class="sets ${cols.length === 1 ? 'c1' : ''}"><div class="hd">Série</div><div class="hd l">${refLbl}</div>${cols.map(c => `<div class="hd">${colLabel(ex.t, c)}</div>`).join('')}<div class="hd">Hotovo</div>${rows}</div>
     <div class="exfoot"><button class="btn sm" data-a="addSet" data-i="${i}">${ICON.plus} Série</button><button class="btn sm" data-a="exInfo" data-ex="${ex.id}">Ukázka</button></div>
   </article>`;
 }
@@ -1126,7 +1137,7 @@ function ladderSeq(cfg) {
 function modeSets(mode, cfg, exId) {
   const c = modeCfg(mode, cfg); const ex = exById(exId);
   if (mode === 'interval') return Array.from({ length: c.rounds }, () => ({ k:'n', side:'', sec: c.work, iv: 1, done: false }));
-  const last = lastSession(exId); const lk = last ? (last.it.sets.filter(s => s.done && s.kg).pop() || {}).kg : null;
+  const last = refSession(exId); const lk = last ? (last.it.sets.filter(s => s.done && s.kg).pop() || {}).kg : null;
   return ladderSeq(c).map(v => ({ k:'n', side:'', reps: v, kg: ex.t === 'wr' ? (lk ?? null) : null, lad: 1, done: false }));
 }
 function intervalTotal(c, n) { return c.rounds * (n * c.work + Math.max(0, n - 1) * c.rest) + Math.max(0, c.rounds - 1) * c.rrest; }
@@ -1648,6 +1659,7 @@ function openSettings() {
       <span class="eyebrow">Trénink</span><div class="list">
         ${sg('unit', 'Jednotky', [['kg', 'kg'], ['lb', 'lb']])}
         ${sg('inc', 'Krok váhy (± a automatická progrese)', [[1, '1'], [1.25, '1,25'], [2.5, '2,5'], [5, '5']])}
+        <div class="li" style="flex-direction:column;align-items:stretch;gap:8px"><div><div style="font-weight:600">Předvyplňovat a ukazovat hodnoty</div><div class="tiny faint">Nejlepší = z tréninku s tvým nejlepším výkonem v daném cviku, takže slabší nebo odlehčovací týden ti příště váhy nesníží. Poslední = z minulého tréninku.</div></div><div class="seg">${[['best', 'Nejlepší'], ['last', 'Poslední']].map(([v, t]) => `<button aria-pressed="${(s.prefill || 'best') === v}" data-a="setSeg" data-k="prefill" data-v="${v}">${t}</button>`).join('')}</div></div>
         ${sg('rest', 'Výchozí pauza (cviky mají i vlastní)', [[60, '1:00'], [90, '1:30'], [120, '2:00'], [180, '3:00']])}
         ${tg('autoRest', 'Spustit pauzu po odškrtnutí série')}
         <button class="li" data-a="soundSettings"><div class="grow"><div style="font-weight:600">Zvuky a odpočty</div><div class="tiny faint">${esc(sndSummary())}</div></div><span class="faint" aria-hidden="true">›</span></button>
